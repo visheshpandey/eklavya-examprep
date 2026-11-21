@@ -198,18 +198,36 @@ _NOW = "to_char(timezone('utc', now()), 'YYYY-MM-DD HH24:MI:SS')"   # the same t
 _pool = None
 
 
+def _make_pool(autocommit: bool, check: bool):
+    from psycopg.rows import dict_row
+    from psycopg_pool import ConnectionPool
+    kwargs = {"row_factory": dict_row, "prepare_threshold": None, "autocommit": autocommit}   # no prepared statements: poolers do not keep them
+    if settings.db_schema:
+        kwargs["options"] = f"-c search_path={settings.db_schema}"
+    pool = ConnectionPool(settings.database_url, kwargs=kwargs, min_size=1, max_size=8, open=False, max_idle=45,
+                          check=ConnectionPool.check_connection if check else None)
+    pool.open(wait=True, timeout=30)
+    return pool
+
+
 def _get_pool():
+    """The read/write pool: each use is one transaction (committed on success). A check before handing a connection out costs a network round trip, so it is
+    only done here, where several statements may share one transaction."""
     global _pool
     if _pool is None:
-        from psycopg.rows import dict_row
-        from psycopg_pool import ConnectionPool
-        kwargs = {"row_factory": dict_row, "prepare_threshold": None}   # no prepared statements: the Neon pooler does not keep them
-        if settings.db_schema:
-            kwargs["options"] = f"-c search_path={settings.db_schema}"
-        _pool = ConnectionPool(settings.database_url, kwargs=kwargs, min_size=1, max_size=8, open=False,
-                               check=ConnectionPool.check_connection)   # Neon closes idle connections: test one before handing it out
-        _pool.open(wait=True, timeout=30)
+        _pool = _make_pool(autocommit=False, check=True)
     return _pool
+
+
+_read_pool = None
+
+
+def _get_read_pool():
+    """Reads only: autocommit (no COMMIT round trip) and no pre-check (a dropped connection is retried by ``query``). One round trip per SELECT."""
+    global _read_pool
+    if _read_pool is None:
+        _read_pool = _make_pool(autocommit=True, check=False)
+    return _read_pool
 
 
 def _tables_without_id() -> set[str]:
@@ -350,6 +368,9 @@ def _once_more(run):
 
 def query(sql, args=()):
     def run():
+        if PG:
+            with _get_read_pool().connection() as conn:
+                return [dict(r) for r in conn.execute(_pg_sql(sql, returning=False), _pg_args(args)).fetchall()]
         with get_conn() as c:
             return [dict(r) for r in c.execute(sql, args).fetchall()]
     return _once_more(run)

@@ -205,6 +205,24 @@ def _shift(value, delta: timedelta):
     return (datetime.fromisoformat(value) + delta).isoformat(timespec="seconds") if "T" in value else (datetime.fromisoformat(value + "+00:00") + delta).isoformat(timespec="seconds")
 
 
+def _insert_rows(c, dump: dict, id_map: dict[int, int], delta) -> None:
+    """Insert the fixture's rows for the students in ``id_map`` (fixture id -> live id), one batched statement per table and column set: on Postgres every
+    separate statement is a network round trip, so a few hundred single inserts would take many seconds."""
+    for table in ("mastery", "attempts", "reviews", "student_misconceptions"):
+        groups: dict[tuple, list[tuple]] = {}
+        for row in dump[table]:
+            if row["student_id"] not in id_map:
+                continue
+            row = dict(row)
+            row["student_id"] = id_map[row["student_id"]]
+            row.pop("id", None)
+            for f in _TIME_FIELDS[table]:
+                row[f] = _shift(row.get(f), delta)
+            groups.setdefault(tuple(row), []).append(tuple(row.values()))
+        for cols, rows in groups.items():
+            c.executemany(f"INSERT INTO {table} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", rows)
+
+
 def load_fixture() -> dict:
     """Insert the pre-simulated class in one transaction, moving every timestamp so the history ends 'just now' (reviews fall due as they would have)."""
     dump = json.loads(FIXTURE.read_text(encoding="utf-8"))
@@ -214,15 +232,7 @@ def load_fixture() -> dict:
         for s in dump["students"]:
             cur = c.execute("INSERT INTO students (name, class_section, is_demo) VALUES (?,?,1)", (s["name"], s["class_section"]))
             ids[s["id"]] = cur.lastrowid
-        for table in ("mastery", "attempts", "reviews", "student_misconceptions"):
-            for row in dump[table]:
-                row = dict(row)
-                row["student_id"] = ids[row["student_id"]]
-                row.pop("id", None)
-                for f in _TIME_FIELDS[table]:
-                    row[f] = _shift(row.get(f), delta)
-                cols = ",".join(row)
-                c.execute(f"INSERT INTO {table} ({cols}) VALUES ({','.join('?' * len(row))})", tuple(row.values()))
+        _insert_rows(c, dump, ids, delta)
     return {"class_section": CLASS, "students": [{"id": ids[s["id"]], "name": s["name"]} for s in dump["students"]]}
 
 
@@ -243,20 +253,11 @@ def reset_tour_students() -> dict:
     delta = datetime.now(timezone.utc) - datetime.fromisoformat(dump["generated_at"])
     by_name = {s["name"]: s["id"] for s in dump["students"]}
     with db.get_conn() as c:
-        for name in TOUR_STUDENTS:
-            sid, fid = live[name], by_name[name]
-            for table in ("mastery", "attempts", "reviews", "student_misconceptions", "dialogues", "assignment_students", "doubts", "misconception_checks"):
-                c.execute(f"DELETE FROM {table} WHERE student_id=?", (sid,))
-            for table in ("mastery", "attempts", "reviews", "student_misconceptions"):
-                for row in dump[table]:
-                    if row["student_id"] != fid:
-                        continue
-                    row = dict(row)
-                    row["student_id"] = sid
-                    row.pop("id", None)
-                    for f in _TIME_FIELDS[table]:
-                        row[f] = _shift(row.get(f), delta)
-                    c.execute(f"INSERT INTO {table} ({','.join(row)}) VALUES ({','.join('?' * len(row))})", tuple(row.values()))
+        sids = [live[n] for n in TOUR_STUDENTS]
+        marks = ",".join("?" * len(sids))
+        for table in ("mastery", "attempts", "reviews", "student_misconceptions", "dialogues", "assignment_students", "doubts", "misconception_checks"):
+            c.execute(f"DELETE FROM {table} WHERE student_id IN ({marks})", tuple(sids))
+        _insert_rows(c, dump, {by_name[n]: live[n] for n in TOUR_STUDENTS}, delta)
         c.execute("DELETE FROM assignments WHERE id NOT IN (SELECT assignment_id FROM assignment_students)")
         c.execute("DELETE FROM ps02_cache WHERE cache_key LIKE 'q:%'")
     srs.set_time_travel(False)
