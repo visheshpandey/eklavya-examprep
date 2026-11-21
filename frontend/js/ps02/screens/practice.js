@@ -6,6 +6,7 @@ import { getLang, getStudent, setLang } from '../state.js';
 import { errorCard, loading, skeleton } from '../ui.js';
 import { deltaList } from './deltas.js';
 import { thinkingPanel } from '../thinking-panel.js';
+import { compressPhoto, notebookView, postNotebook, snapControls } from '../notebook.js';
 import { assignmentBanner } from './assignment-banner.js';
 import { mountDialogue } from './dialogue.js';
 import { speak, stop as stopSpeech } from '../tts.js';
@@ -194,10 +195,12 @@ export async function practice(root, ctx) {
       },
     });
     mic.addEventListener('click', () => (dictation.listening() ? dictation.stop() : dictation.start(text.value)));
+    const snap = snapControls({ onPhoto: (file) => readNotebook({ file }), onSample: (sample) => readNotebook({ sample }) });
     const panel = h('div', { class: 'card reasoning' },
       h('h2', null, check ? 'Quick check: how did you get it?' : 'Explain your thinking'),
       h('p', null, a.reasoning_prompt),
-      dictation.available() ? mic : h('p', { class: 'muted small' }, 'Voice input is not supported in this browser (try Chrome or Edge). You can type below.'),
+      h('div', { class: 'row tight' }, dictation.available() ? mic : h('p', { class: 'muted small' }, 'Voice input is not supported in this browser (try Chrome or Edge). You can type below.')),
+      snap.el,
       text, status, h('div', { class: 'row' }, sendBtn, h('button', { class: 'btn btn-quiet', type: 'button', onClick: () => { dictation.stop(); panel.remove(); finishRow(box); } }, 'Skip')));
     box.append(panel);
     if (voice) {   // voice mode: read the prompt, listen for the explanation, send it
@@ -229,19 +232,39 @@ export async function practice(root, ctx) {
           else if (ev.type === 'final') r = ev.result;
         }, { timeout: 45000 });
         if (!ctx.live()) return;
-        if (thinking) thinking.add(r.trace);
-        const talk = Boolean(r.misconception) && !r.diagnosis.is_careless_error;   // a known misconception: talk it through instead of just correcting
-        const card = misconceptionCard(r, text.value.trim(), talk);
-        panel.replaceChildren(card);
-        const shown = box.querySelector('.deltas');   // update the SAME card in place: current -> new, no second card and no jump back
-        let finalDeltas = shown;
-        if (shown) shown.update(r.mastery_changes, 'Your mastery, updated with your explanation');
-        else { finalDeltas = deltaList(r.mastery_changes, { title: 'Your mastery, updated with your explanation' }); panel.after(finalDeltas); }
-        if (!talk) { finishRow(box); return; }
-        const done = () => { card.reveal(); finishRow(box); };
-        panel.after(mountDialogue({ student, attemptId: a.attempt_id, onDone: done, onUnavailable: done }));
+        finishReasoning(r, { panel, box, thinking, said: text.value.trim() });
       } catch (err) { panel.replaceChildren(errorCard(err.message, () => { panel.remove(); reasoning(a, box); })); }
     }
+
+    // 📸 the student shows their written working (a photo, or a built-in sample) instead of typing / speaking
+    async function readNotebook({ file = null, sample = null }) {
+      dictation.stop(); snap.setBusy(true); status.textContent = '';
+      const photoUrl = file ? URL.createObjectURL(file) : sample ? sample.image : null;
+      const busy = h('div', { class: 'nb-busy', role: 'status' }, h('p', { class: 'muted' }, '📸 Reading your handwriting…'), photoUrl && h('img', { src: photoUrl, alt: '', class: 'nb-thumb' }), skeleton(3));
+      panel.append(busy);
+      try {
+        const blob = file ? await compressPhoto(file) : sample ? await (await fetch(sample.image)).blob() : null;
+        const res = await postNotebook({ studentId: student.id, attemptId: sample ? null : a.attempt_id, sampleId: sample ? sample.id : null, blob });
+        busy.remove(); snap.setBusy(false);
+        if (!ctx.live()) return;
+        if (!res.readable) { status.textContent = res.message || 'Couldn’t read that clearly. Try again, or type it.'; text.focus(); return; }
+        finishReasoning(res, { panel, box, thinking, said: '📸 notebook', nbView: notebookView(res, photoUrl), isSample: Boolean(sample) });
+      } catch (err) { busy.remove(); snap.setBusy(false); status.textContent = err.message || 'Couldn’t read that. Try again, or type it.'; }
+    }
+  }
+
+  /** Whatever the student used to explain (voice, text or a notebook photo): show the misconception, update mastery, then talk it through. */
+  function finishReasoning(r, { panel, box, thinking, said, nbView = null, isSample = false }) {
+    if (thinking) thinking.add(r.trace);
+    const talk = Boolean(r.misconception) && !r.diagnosis.is_careless_error;   // a known misconception: talk it through instead of just correcting
+    const card = misconceptionCard(r, said, talk);
+    panel.replaceChildren(...[nbView, card].filter(Boolean));
+    const shown = isSample ? null : box.querySelector('.deltas');   // update the SAME card in place: current -> new, no second card and no jump back
+    if (shown) shown.update(r.mastery_changes, 'Your mastery, updated with your explanation');
+    else panel.after(deltaList(r.mastery_changes, { title: isSample ? 'Your mastery, from the sample page' : 'Your mastery, updated with your explanation' }));
+    if (!talk) { finishRow(box); return; }
+    const done = () => { card.reveal(); finishRow(box); };
+    panel.after(mountDialogue({ student, attemptId: r.attempt_id, onDone: done, onUnavailable: done }));
   }
 
   function misconceptionCard(r, said, talk = false) {

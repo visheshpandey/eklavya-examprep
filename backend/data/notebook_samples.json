@@ -1,0 +1,60 @@
+{
+  "samples": [
+    {
+      "id": "unit",
+      "title": "A unit slip",
+      "subtitle": "200 mA used as 200",
+      "image": "assets/notebook/sample-unit.jpg",
+      "picked": 0,
+      "question": {
+        "stem": "A current of 200 mA flows through a wire for 10 s. How much charge flows through the wire?",
+        "options": ["2000 C", "20 C", "2 C", "0.2 C"],
+        "correct_index": 2,
+        "concept_id": "C1",
+        "difficulty": 2,
+        "distractor_misconceptions": {"0": "MC22", "1": "MC_UNKNOWN", "3": "MC_UNKNOWN"},
+        "explanation": "200 mA = 0.2 A, so Q = I × t = 0.2 × 10 = 2 C."
+      },
+      "canned": {
+        "readable": true,
+        "transcribed_steps": ["Given: I = 200 mA, t = 10 s", "Q = I × t", "Q = 200 × 10", "Q = 2000 C", "Ans: 2000 coulomb"],
+        "first_wrong_step": 2,
+        "error": "mA was not converted to A: you used 200 instead of 0.2 A",
+        "misconception_id": "MC22",
+        "confidence": "high",
+        "is_careless_error": false,
+        "new_label": "",
+        "feedback_hinglish": "Line 3 mein dikkat hai: tumne 200 mA ko seedha 200 le liya. Formula se pehle mA ko A mein badalna padta hai: 200 mA = 0.2 A, phir Q = 0.2 × 10 = 2 C.",
+        "feedback_english": "The problem is line 3: you used 200 mA as 200. Convert mA to A before using the formula: 200 mA = 0.2 A, so Q = 0.2 × 10 = 2 C."
+      }
+    },
+    {
+      "id": "formula",
+      "title": "A flipped formula",
+      "subtitle": "Q = I / t",
+      "image": "assets/notebook/sample-formula.jpg",
+      "picked": 0,
+      "question": {
+        "stem": "A current of 2 A flows through a bulb for 10 s. How much charge flows through it?",
+        "options": ["0.2 C", "5 C", "12 C", "20 C"],
+        "correct_index": 3,
+        "concept_id": "C1",
+        "difficulty": 2,
+        "distractor_misconceptions": {"0": "MC21", "1": "MC21", "2": "MC_UNKNOWN"},
+        "explanation": "Q = I × t = 2 × 10 = 20 C."
+      },
+      "canned": {
+        "readable": true,
+        "transcribed_steps": ["Given: I = 2 A, t = 10 s", "Q = I / t", "Q = 2 / 10", "Q = 0.2 C", "Ans: 0.2 coulomb"],
+        "first_wrong_step": 1,
+        "error": "the formula is upside-down: charge is current × time, not current ÷ time",
+        "misconception_id": "MC21",
+        "confidence": "high",
+        "is_careless_error": false,
+        "new_label": "",
+        "feedback_hinglish": "Line 2 galat hai: tumne Q = I / t likha. Charge = current × time hota hai, to Q = 2 × 10 = 20 C. Units se check karo: ampere × second = coulomb.",
+        "feedback_english": "Line 2 is wrong: you wrote Q = I / t. Charge is current × time, so Q = 2 × 10 = 20 C. Check with units: ampere × second = coulomb."
+      }
+    }
+  ]
+}

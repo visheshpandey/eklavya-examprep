@@ -30,11 +30,11 @@ def _holders(student_ids: list[int]) -> dict[str, list[dict]]:
     if not student_ids:
         return {}
     marks = ",".join("?" * len(student_ids))
-    rows = db.query(f"SELECT sm.student_id, sm.misconception_id, sm.count, sm.last_quote, s.name FROM student_misconceptions sm JOIN students s ON s.id = sm.student_id "
+    rows = db.query(f"SELECT sm.student_id, sm.misconception_id, sm.count, sm.last_quote, sm.last_source, s.name FROM student_misconceptions sm JOIN students s ON s.id = sm.student_id "
                     f"WHERE sm.student_id IN ({marks}) AND sm.resolved = 0 AND sm.count > 0 ORDER BY sm.count DESC", tuple(student_ids))
     out: dict[str, list[dict]] = {}
     for r in rows:
-        out.setdefault(r["misconception_id"], []).append({"student_id": r["student_id"], "name": r["name"], "count": r["count"], "quote": r["last_quote"]})
+        out.setdefault(r["misconception_id"], []).append({"student_id": r["student_id"], "name": r["name"], "count": r["count"], "quote": r["last_quote"], "source": r["last_source"]})
     return out
 
 

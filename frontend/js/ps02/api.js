@@ -72,7 +72,7 @@ export async function apiUpload(path, formData, { timeout = 120000 } = {}) {
       maybeStudentGone(res.status, detail, path, { student_id: formData.get?.('student_id') });
       throw new ApiError(detail || `The upload failed (${res.status}).`, res.status);
     }
-    return await res.json();
+    return deepMath(await res.json());
   } catch (err) {
     if (err instanceof ApiError) throw err;
     throw new ApiError(err.name === 'AbortError' ? 'The upload took too long. Try a smaller file.' : 'Could not reach the server.');

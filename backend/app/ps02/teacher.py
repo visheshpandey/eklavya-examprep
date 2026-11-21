@@ -32,9 +32,9 @@ def overview(class_section: str | None = None) -> dict:
     risk = []
     for s in students:
         m = lm.get_mastery(s["id"])
-        actives = db.query("SELECT misconception_id, count, last_quote FROM student_misconceptions WHERE student_id=? AND resolved=0 AND count>0", (s["id"],))
+        actives = db.query("SELECT misconception_id, count, last_quote, last_source FROM student_misconceptions WHERE student_id=? AND resolved=0 AND count>0", (s["id"],))
         for a in actives:
-            mc_students.setdefault(a["misconception_id"], []).append({"student": s["name"], "student_id": s["id"], "quote": a["last_quote"], "count": a["count"]})
+            mc_students.setdefault(a["misconception_id"], []).append({"student": s["name"], "student_id": s["id"], "quote": a["last_quote"], "count": a["count"], "source": a["last_source"]})
         avg = sum(m.values()) / len(m)
         matrix.append({"student_id": s["id"], "name": s["name"], "mastery": {c: round(m[c], 3) for c in order}, "average": round(avg, 3)})
         risk.append({"student_id": s["id"], "name": s["name"], "average": round(avg, 3), "active_misconceptions": len(actives),

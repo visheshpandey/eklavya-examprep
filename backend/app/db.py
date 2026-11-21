@@ -163,6 +163,7 @@ SCHEMA += PS02_SCHEMA
 
 # Columns added after the first release: (table, column, type). init_db adds any that an older database lacks.
 MIGRATIONS = (
+    ("student_misconceptions", "last_source", "TEXT"),      # PS02: voice | text | notebook
     ("students", "user_id", "INTEGER"),               # PS02: the original-Eklavya user behind a student (notes, doubts)
     ("doubts", "student_id", "INTEGER"),              # PS02: which student asked, and what it was about
     ("doubts", "concept_id", "TEXT"),

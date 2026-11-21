@@ -73,16 +73,16 @@ def misconception_card(mc_id: str) -> dict:
     return {"id": mc_id, "label": m.get("label", ""), "description": m.get("description", ""), "correction": m.get("correction", ""), "analogy": m.get("analogy", "")}
 
 
-def _note_misconception(student_id: int, mc_id: str, quote: str, when: datetime | None = None) -> None:
+def _note_misconception(student_id: int, mc_id: str, quote: str, when: datetime | None = None, source: str | None = None) -> None:
     when_s = (when or datetime.now(timezone.utc)).isoformat(timespec="seconds")
     row = db.one("SELECT count FROM student_misconceptions WHERE student_id=? AND misconception_id=?", (student_id, mc_id))
     with db.get_conn() as c:
         if row:
-            c.execute("UPDATE student_misconceptions SET count=?, last_seen=?, resolved=0, last_quote=? WHERE student_id=? AND misconception_id=?",
-                      (row["count"] + 1, when_s, quote[:300], student_id, mc_id))
+            c.execute("UPDATE student_misconceptions SET count=?, last_seen=?, resolved=0, last_quote=?, last_source=? WHERE student_id=? AND misconception_id=?",
+                      (row["count"] + 1, when_s, quote[:300], source, student_id, mc_id))
         else:
-            c.execute("INSERT INTO student_misconceptions (student_id, misconception_id, count, last_seen, resolved, last_quote) VALUES (?,?,?,?,0,?)",
-                      (student_id, mc_id, 1, when_s, quote[:300]))
+            c.execute("INSERT INTO student_misconceptions (student_id, misconception_id, count, last_seen, resolved, last_quote, last_source) VALUES (?,?,?,?,0,?,?)",
+                      (student_id, mc_id, 1, when_s, quote[:300], source))
 
 
 def active_misconceptions(student_id: int) -> list[dict]:
@@ -130,7 +130,7 @@ def record_answer(student_id: int, question: dict, chosen_index: int, *, phase: 
     if correct:
         _resolve_if_overcome(student_id, question)
     elif mc and mc != "MC_UNKNOWN" and reasoning:
-        _note_misconception(student_id, mc, reasoning, when)
+        _note_misconception(student_id, mc, reasoning, when, mode)
     return {"attempt_id": attempt_id, "correct": correct, "deltas": deltas, "review": review, "misconception_prior": prior}
 
 
@@ -258,7 +258,7 @@ def apply_reasoning(student_id: int, attempt_id: int, reasoning: str, mode: str 
     db.execute("UPDATE attempts SET reasoning_text=?, reasoning_mode=?, misconception_id=?, misconception_confidence=?, is_careless=?, delta_json=? WHERE id=?",
                (reasoning, mode, final_mc, diag["confidence"], 1 if careless else 0, json.dumps({**meta, "deltas": deltas}), attempt_id))
     if not correct and confident_mc:
-        _note_misconception(student_id, confident_mc, diag["evidence"] or reasoning, when)
+        _note_misconception(student_id, confident_mc, diag["evidence"] or reasoning, when, mode)
     _prefetch_after(student_id)
     out = {"attempt_id": attempt_id, "diagnosis": {**diag, "misconception_id": final_mc or "NONE", "is_careless_error": careless},
            "misconception": misconception_card(final_mc) if final_mc and final_mc != "MC_UNKNOWN" else None,

@@ -7,6 +7,7 @@ import { createDictation } from '../lib/dictation.js';
 import { getLang, getStudent, setLang } from './state.js';
 import { isMuted, setMuted, speak, stop as stopSpeech } from './tts.js';
 import { pct } from './ui.js';
+import { compressPhoto, notebookView, postNotebook, snapControls } from './notebook.js';
 
 const LANGS = [['hinglish', 'Hinglish'], ['english', 'English'], ['hindi', 'हिन्दी']];
 const EXAMPLES = ['Current kya hota hai, aur bulb mein kam kyun nahi hota?', 'Why does a concave lens spread light?', 'Parallel mein total resistance kam kyun hota hai?'];
@@ -38,10 +39,11 @@ export function mountAskWidget() {
     h('button', { type: 'button', class: 'seg-btn', 'aria-pressed': String(getLang() === id), onClick: (e) => { setLang(id); langBar.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === e.currentTarget))); } }, label)));
   const muteBtn = h('button', { class: 'btn btn-quiet btn-small', type: 'button', 'aria-pressed': String(isMuted()), onClick: () => { setMuted(!isMuted()); muteBtn.setAttribute('aria-pressed', String(isMuted())); muteBtn.textContent = isMuted() ? '🔇 Voice off' : '🔊 Voice on'; } }, isMuted() ? '🔇 Voice off' : '🔊 Voice on');
   const examples = h('div', { class: 'chips' }, EXAMPLES.map((q) => h('button', { class: 'chip', type: 'button', onClick: () => { text.value = q; send(); } }, q)));
+  const snap = snapControls({ onPhoto: (file) => readNotebook({ file }), onSample: (sample) => readNotebook({ sample }) });
   const panel = h('section', { class: 'ask-panel', role: 'dialog', 'aria-label': 'Ask a doubt', hidden: true },
     h('div', { class: 'ask-head' }, h('div', null, h('p', { class: 'eyebrow' }, 'Ask Eklavya'), h('h2', null, 'Any doubt, any language')),
       h('div', { class: 'dlg-tools' }, muteBtn, h('button', { class: 'btn btn-quiet btn-small', type: 'button', 'aria-label': 'Close', onClick: () => toggle(false) }, '✕'))),
-    langBar, notesLine, chat, examples, dictation.available() ? mic : h('p', { class: 'muted small' }, 'Voice input needs Chrome or Edge. You can type.'),
+    langBar, notesLine, chat, examples, h('div', { class: 'row tight' }, dictation.available() ? mic : h('p', { class: 'muted small' }, 'Voice input needs Chrome or Edge. You can type.')), snap.el,
     h('div', { class: 'row dlg-text' }, text, sendBtn), status);
   document.body.append(fab, panel);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) toggle(false); });
@@ -92,6 +94,30 @@ export function mountAskWidget() {
       typing.remove();
       bubble('tutor', h('p', null, err.message || 'Something went wrong. Please try again.'));
     } finally { busy = false; sendBtn.disabled = false; usedVoice = false; text.focus(); }
+  }
+
+  // 📸 a photo of your working: read it, find the first wrong line, log the misconception, offer to talk it through
+  async function readNotebook({ file = null, sample = null }) {
+    const student = getStudent();
+    if (!student) { bubble('tutor', h('p', null, 'Please pick a student first.')); return; }
+    if (busy) return;
+    busy = true; snap.setBusy(true); stopSpeech();
+    const photoUrl = file ? URL.createObjectURL(file) : sample ? sample.image : null;
+    bubble('student', h('p', null, sample ? `📸 Sample: ${sample.title}` : '📸 My working'), photoUrl && h('img', { src: photoUrl, alt: 'Your notebook page', class: 'nb-thumb' }));
+    const typing = bubble('tutor', h('p', { class: 'typing-dots', 'aria-label': 'Reading your handwriting' }, h('i'), h('i'), h('i')));
+    try {
+      const blob = file ? await compressPhoto(file) : sample ? await (await fetch(sample.image)).blob() : null;
+      const res = await postNotebook({ studentId: student.id, sampleId: sample ? sample.id : null, conceptId: hint, blob });
+      typing.remove();
+      if (!res.readable) { bubble('tutor', h('p', null, res.message || 'Couldn’t read that clearly. Try again, or type it.')); return; }
+      const extra = [];
+      if (res.concept) extra.push(h('p', { class: 'small' }, 'Tagged to ', h('b', null, res.concept.name), '.'));
+      if (res.misconception) extra.push(h('div', { class: 'ask-mc' }, h('b', null, `Misconception: ${res.misconception.label}`), h('p', { class: 'small' }, res.misconception.correction),
+        (res.mastery_changes || []).map((m) => h('p', { class: 'small' }, `${m.name}: ${pct(m.before)} → ${pct(m.after)}`)),
+        h('a', { class: 'btn btn-small btn-primary', href: `#/practice?concept=${res.concept?.id || res.sample?.concept_id || 'C1'}&talk=${res.misconception.id}`, onClick: () => toggle(false) }, 'Talk it through')));
+      bubble('tutor', notebookView(res, photoUrl), ...extra);
+    } catch (err) { typing.remove(); bubble('tutor', h('p', null, err.message || 'Something went wrong. Please try again.')); }
+    finally { busy = false; snap.setBusy(false); }
   }
 
   function renderAnswer(r) {

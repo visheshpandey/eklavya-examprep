@@ -39,7 +39,7 @@ export async function teacher(root, ctx) {
   const mcs = ov.top_misconceptions.slice(0, 6).map((m) => h('li', { class: 'mc-row' },
     h('div', { class: 'mc-count', 'aria-label': `${m.students} students` }, h('b', null, m.students), h('small', null, m.students === 1 ? 'student' : 'students')),
     h('div', null, h('b', null, m.label), h('p', { class: 'small' }, m.description),
-      m.examples.slice(0, 2).map((e) => h('blockquote', { class: 'quote' }, `“${e.quote}”`, h('small', null, ` ${e.student}`))))));
+      m.examples.slice(0, 2).map((e) => h('blockquote', { class: 'quote' }, `“${e.quote}”`, h('small', null, ` ${e.student}`), e.source === 'notebook' && h('span', { class: 'chip chip-action' }, '📸 from notebook'))))));
 
   // ---- at risk
   const risk = ov.at_risk.slice(0, 3).map((r) => h('li', { class: 'risk' }, h('a', { class: 'link', href: `#/student/${r.student_id}` }, h('b', null, r.name)),

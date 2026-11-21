@@ -61,7 +61,7 @@ function groupCard(g, reload) {
     h('div', { class: 'row between wrap tight' }, h('h3', null, `${g.name} · ${plural(g.size, 'student')}`), h('span', { class: 'chip' }, g.concept_names[0] || 'Physics')),
     h('p', null, h('b', null, g.misconception.label), ': ', g.misconception.description),
     g.size > 0 && h('div', { class: 'chips' }, g.students.map((s) => h('a', { class: 'chip chip-action', href: `#/student/${s.student_id}`, title: s.quote ? `“${s.quote}”` : '' }, s.name))),
-    g.size > 0 && g.students.filter((s) => s.quote).slice(0, 2).map((s) => h('blockquote', { class: 'quote' }, `“${s.quote}”`, h('small', null, ` ${s.name}`))),
+    g.size > 0 && g.students.filter((s) => s.quote).slice(0, 2).map((s) => h('blockquote', { class: 'quote' }, `“${s.quote}”`, h('small', null, ` ${s.name}`), s.source === 'notebook' && h('span', { class: 'chip chip-action' }, '📸 from notebook'))),
     statusBox,
     h('div', { class: 'row' }, lessonBtn, assignBtn, preview), lessonBox);
 }

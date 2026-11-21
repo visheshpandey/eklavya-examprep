@@ -435,3 +435,34 @@ button.chip, a.chip-action { min-height: 36px; cursor: pointer; }
 .node-delta.up { fill: var(--ok-text); } .node-delta.down { fill: var(--bad-text); }
 @keyframes floatUp { 0% { opacity: 0; transform: translateY(8px); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
 @media (max-width: 640px) { .demo-screen { min-height: 360px; } .demo-dot { font-size: 0; gap: 0; } .demo-dot span { font-size: 11px; } }
+
+
+/* ---- 📸 Snap your notebook */
+.snap { display: grid; gap: var(--s-2); }
+.snap .row { margin-top: 0; }
+.snap-btn { background: var(--speak); border-color: var(--speak); color: var(--on-speak); }
+.snap-btn:hover:not(:disabled) { background: #f0b04a; }
+.snap-samples { display: grid; gap: var(--s-2); grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.snap-sample { display: flex; gap: var(--s-3); align-items: center; text-align: left; padding: var(--s-2); border: 1px solid var(--line-strong); border-radius: var(--r-control); background: var(--paper); }
+.snap-sample:hover { border-color: var(--accent-fill); }
+.snap-sample img { width: 54px; height: 66px; object-fit: cover; border-radius: 4px; box-shadow: 0 1px 4px rgb(0 0 0 / .3); }
+.snap-sample span { display: grid; } .snap-sample small { color: var(--ink-3); }
+.nb-busy { display: grid; gap: var(--s-2); }
+.nb-thumb { max-width: 160px; max-height: 120px; border-radius: 6px; object-fit: cover; }
+.nb-view { display: grid; gap: var(--s-3); animation: bubble-in .35s ease-out both; }
+.nb-sample { background: var(--surface-2); border-radius: var(--r-control); padding: var(--s-2) var(--s-3); font-size: var(--text-sm); }
+.nb-grid { display: grid; gap: var(--s-4); grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: start; }
+@media (max-width: 640px) { .nb-grid { grid-template-columns: 1fr; } }
+.nb-photo { margin: 0; display: grid; gap: var(--s-1); }
+.nb-photo img { width: 100%; max-height: 380px; object-fit: contain; border-radius: 8px; background: var(--surface-3); box-shadow: var(--shadow); }
+.nb-read h3 { margin: 0 0 var(--s-2); }
+.nb-steps { display: grid; gap: 4px; margin-bottom: var(--s-3); }
+.nb-step { display: grid; grid-template-columns: 26px 1fr auto; gap: var(--s-2); align-items: center; padding: 6px var(--s-2); border-radius: var(--r-control); border: 1px solid transparent; font-family: var(--font-hand); font-size: 1.15rem; }
+.nb-no { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+.nb-wrong { background: var(--bad-soft); border-color: var(--bad-text); color: var(--bad-text); font-weight: 700; animation: wrongPulse 1.4s ease-in-out 2; }
+@keyframes wrongPulse { 50% { box-shadow: 0 0 0 5px rgb(168 51 42 / .18); } }
+.nb-x { font-size: 1.1rem; }
+.nb-callout { background: var(--bad-soft); color: var(--bad-text); border-left: 4px solid var(--bad-text); border-radius: 0 var(--r-control) var(--r-control) 0; padding: var(--s-2) var(--s-3); margin-bottom: var(--s-2); }
+.nb-callout.nb-ok { background: var(--ok-soft); color: var(--ok-text); border-color: var(--ok-fill); }
+.nb-feedback { font-size: var(--text-md); }
+.ask-chat .nb-photo img { max-height: 160px; } .ask-chat .nb-grid { grid-template-columns: 1fr; } .ask-chat .nb-step { font-size: 1rem; }
