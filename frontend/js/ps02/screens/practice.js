@@ -1,10 +1,11 @@
 // Practice loop: targeted question -> answer -> (explain your thinking, by voice or text) -> misconception card + live mastery changes.
-import { api, qs } from '../api.js';
+import { api, apiStream, qs } from '../api.js';
 import { h } from '../dom.js';
 import { createDictation } from '../../lib/dictation.js';
 import { getLang, getStudent, setLang } from '../state.js';
 import { errorCard, loading, skeleton } from '../ui.js';
 import { deltaList } from './deltas.js';
+import { thinkingPanel } from '../thinking-panel.js';
 import { mountDialogue } from './dialogue.js';
 import { speak, stop as stopSpeech } from '../tts.js';
 import { matchSpokenOption, questionToSpeech } from '../spoken-answer.js';
@@ -87,6 +88,8 @@ export async function practice(root, ctx) {
     };
     document.addEventListener('keydown', onKey);
     const feedback = h('div', { class: 'feedback' });
+    const thinking = thinkingPanel(q.trace || []);
+    const rc = q.root_cause;
     const voiceStatus = h('p', { class: 'muted small', role: 'status' });
     stage.dataset.locked = '';
     stage.replaceChildren(h('div', { class: 'card question' },
@@ -94,10 +97,13 @@ export async function practice(root, ctx) {
         h('span', { class: `pill diff-${q.difficulty}` }, `${DIFF[q.difficulty]} · level ${q.difficulty}`), h('span', { class: 'chip' }, `${q.chapter} · ${q.concept_name}`),
         q.source !== 'ai' && h('span', { class: 'chip', title: 'The AI was slow, so a prepared question was used' }, 'prepared question')),
       h('p', { class: 'why' }, h('b', null, 'Why this question? '), q.why),
+      rc && h('p', { class: `root-chip ${rc.applied ? 'root-applied' : ''}` }, rc.applied ? '🎯 Root first: ' : '💡 Heads up: ',
+        rc.applied ? `${rc.name} is what is holding things back (${rc.misconception?.label || 'weak basics'}), so we start there.` : `if this keeps going wrong, the root cause may be in ${rc.name}${rc.misconception ? ` (${rc.misconception.label})` : ''}. `,
+        !rc.applied && h('a', { class: 'link', href: `#/practice?concept=${rc.concept_id}${rc.misconception ? `&talk=${rc.misconception.id}` : ''}` }, 'Fix the root first')),
       q.note && h('p', { class: 'cite cite-notes' }, '📄 From your notes: ', h('b', null, [q.note.file_name, q.note.heading || q.note.topic].filter(Boolean).join(' · '))),
       h('h2', { class: 'stem' }, q.stem), h('div', { class: 'options', role: 'radiogroup', 'aria-label': 'Answer options' }, options),
       h('div', { class: 'row' }, submit, h('button', { class: 'btn btn-quiet btn-small', type: 'button', onClick: () => speak(questionToSpeech(q), getLang(), { force: true }) }, '🔊 Read aloud')), voiceStatus),
-      feedback);
+      thinking.el, feedback);
     options[0].focus({ preventScroll: true });
     window.dispatchEvent(new CustomEvent('ps02:context', { detail: { concept_id: q.concept_id } }));
     if (voice) voiceAnswer();
@@ -135,8 +141,9 @@ export async function practice(root, ctx) {
           h('div', { class: `result ${a.correct ? 'result-ok' : 'result-bad'}`, role: 'status' }, h('b', null, a.correct ? 'Correct!' : 'Not quite.'), ' ', a.explanation,
             q.note && h('p', { class: 'cite cite-notes' }, '📄 From your notes: ', h('b', null, [q.note.file_name, q.note.heading || q.note.topic].filter(Boolean).join(' · ')))),
           deltas);
+        thinking.add(a.trace);
         const spoke = voice ? speak(`${a.correct ? 'Correct.' : 'Not quite.'} ${a.explanation}`, getLang(), { force: true }) : Promise.resolve();
-        if (a.needs_reasoning) reasoning(a, feedback, spoke); else finishRow(feedback, spoke);
+        if (a.needs_reasoning) reasoning(a, feedback, spoke, thinking); else finishRow(feedback, spoke);
       } catch (err) {
         submit.disabled = false; submit.textContent = 'Check answer'; options.forEach((o) => { o.disabled = false; }); stage.dataset.locked = '';
         feedback.replaceChildren(errorCard(err.message.includes('expired') ? 'That question expired. Let’s get a new one.' : err.message, nextQuestion));
@@ -158,7 +165,7 @@ export async function practice(root, ctx) {
     }
   }
 
-  function reasoning(a, box, spoke = Promise.resolve()) {
+  function reasoning(a, box, spoke = Promise.resolve(), thinking = null) {
     const check = a.reasoning_kind === 'check';
     let usedVoice = false;
     const status = h('p', { class: 'muted small', role: 'status' });
@@ -196,10 +203,22 @@ export async function practice(root, ctx) {
 
     async function sendReasoning() {
       dictation.stop(); sendBtn.disabled = true;
-      panel.replaceChildren(h('h2', null, 'Reading your reasoning…'), h('p', { class: 'muted' }, 'Looking for the idea behind your answer, not just the option you picked.'), skeleton(4));
+      // streamed: a first impression within a second, the AI's wording as it is written, then the authoritative result
+      const quick = h('p', { class: 'muted', role: 'status' }, 'Looking for the idea behind your answer, not just the option you picked.');
+      const live = h('p', { class: 'stream-text' });
+      panel.replaceChildren(h('h2', null, 'Reading your reasoning…'), quick, live, skeleton(2));
       try {
-        const r = await api('/api/practice/reasoning', { method: 'POST', body: { student_id: student.id, attempt_id: a.attempt_id, reasoning_text: text.value.trim(), reasoning_mode: usedVoice ? 'voice' : 'text' } });
+        let r = null, hide = false;
+        await apiStream('/api/practice/reasoning/stream', { student_id: student.id, attempt_id: a.attempt_id, reasoning_text: text.value.trim(), reasoning_mode: usedVoice ? 'voice' : 'text', language: getLang() }, (ev) => {
+          if (ev.type === 'quick') {
+            const d = ev.diagnosis;
+            hide = d.misconception_id && d.misconception_id !== 'MC_UNKNOWN' && d.misconception_id !== 'NONE';   // a known misconception: the wording would give the answer away (we talk it through instead)
+            quick.textContent = hide ? `First impression: this sounds like “${d.label}”. Checking…` : 'First impression ready. Checking your wording…';
+          } else if (ev.type === 'delta' && !hide) live.textContent += ev.text;
+          else if (ev.type === 'final') r = ev.result;
+        }, { timeout: 45000 });
         if (!ctx.live()) return;
+        if (thinking) thinking.add(r.trace);
         const talk = Boolean(r.misconception) && !r.diagnosis.is_careless_error;   // a known misconception: talk it through instead of just correcting
         const card = misconceptionCard(r, text.value.trim(), talk);
         panel.replaceChildren(card);
@@ -209,7 +228,7 @@ export async function practice(root, ctx) {
         else { finalDeltas = deltaList(r.mastery_changes, { title: 'Your mastery, updated with your explanation' }); panel.after(finalDeltas); }
         if (!talk) { finishRow(box); return; }
         const done = () => { card.reveal(); finishRow(box); };
-        finalDeltas.after(mountDialogue({ student, attemptId: a.attempt_id, onDone: done, onUnavailable: done }));
+        panel.after(mountDialogue({ student, attemptId: a.attempt_id, onDone: done, onUnavailable: done }));
       } catch (err) { panel.replaceChildren(errorCard(err.message, () => { panel.remove(); reasoning(a, box); })); }
     }
   }
@@ -245,5 +264,15 @@ export async function practice(root, ctx) {
     return card;
   }
 
-  nextQuestion();
+  // "Fix the root first" from the map: a short conversation about the root misconception, then practice on that concept
+  function rootFirst(conceptId, misconceptionId) {
+    const concept = misconceptionId && conceptId;
+    const intro = h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Fix the root first'), h('h2', null, 'Let’s talk about the real cause'),
+      h('p', null, 'Before more practice, let’s clear the idea underneath. Explain it in your own words.'));
+    const go = h('button', { class: 'btn btn-primary', type: 'button', hidden: true, onClick: () => nextQuestion() }, 'Now practise this concept');
+    const dlg = mountDialogue({ student, misconceptionId, conceptId: concept, onDone: () => { go.hidden = false; go.focus(); }, onUnavailable: () => nextQuestion() });
+    stage.replaceChildren(intro, dlg, h('div', { class: 'row' }, go, h('button', { class: 'btn btn-quiet', type: 'button', onClick: () => nextQuestion() }, 'Skip to practice')));
+  }
+
+  if (ctx.query.talk && firstConcept) rootFirst(firstConcept, ctx.query.talk); else nextQuestion();
 }

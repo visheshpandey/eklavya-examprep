@@ -321,3 +321,26 @@ button.chip, a.chip-action { min-height: 36px; cursor: pointer; }
   .ask-fab-label { display: none; } .ask-fab { padding: 0 var(--s-3); }
   .ask-panel { right: 0; bottom: 0; width: 100vw; max-height: 88vh; border-radius: 12px 12px 0 0; }
 }
+
+
+/* ---- Eklavya's thinking, root cause, streaming */
+.think { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); padding: var(--s-2) var(--s-4); }
+.think summary { cursor: pointer; display: flex; align-items: center; gap: var(--s-2); min-height: 36px; flex-wrap: wrap; list-style: none; }
+.think summary::-webkit-details-marker { display: none; }
+.think[open] summary { border-bottom: 1px solid var(--line); margin-bottom: var(--s-2); }
+.think-list { display: grid; gap: var(--s-2); padding-bottom: var(--s-2); }
+.think-step { display: grid; grid-template-columns: 148px 1fr auto; gap: var(--s-3); align-items: baseline; font-size: var(--text-sm); animation: bubble-in .3s ease-out both; }
+.think-tool { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent-text); }
+.tool-trace_root_cause { color: var(--terracotta); } .tool-detect_misconception { color: var(--bad-text); } .tool-update_mastery, .tool-schedule_review { color: var(--ok-text); }
+@media (max-width: 640px) { .think-step { grid-template-columns: 1fr; gap: 0; } }
+.root-chip { background: var(--warn-soft); color: var(--warn-text); border-radius: var(--r-control); padding: var(--s-2) var(--s-3); font-size: var(--text-sm); }
+.root-chip.root-applied { background: var(--ok-soft); color: var(--ok-text); }
+.root-card { border-color: var(--terracotta); margin-bottom: var(--s-4); display: grid; gap: var(--s-2); }
+.root-card h2 { margin: 0; }
+.edge-root { stroke: var(--terracotta); stroke-width: 3.4; opacity: 1; stroke-dasharray: 9 7; animation: march 0.9s linear infinite; }
+@keyframes march { to { stroke-dashoffset: -16; } }
+.node.root-cause rect { stroke: var(--terracotta); stroke-width: 4; animation: rootpulse 1.5s ease-in-out infinite; }
+.node.struggling rect { stroke: var(--bad-text); stroke-width: 3.5; stroke-dasharray: 5 3; }
+@keyframes rootpulse { 50% { stroke-width: 6.5; } }
+.stream-text { min-height: 1.4em; color: var(--ink-2); }
+@media (max-width: 640px) { #app { padding-bottom: 96px; } }

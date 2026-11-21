@@ -15,7 +15,7 @@ from pydantic import BaseModel, ValidationError, field_validator
 
 from app import db
 from app.ai import gemini
-from app.ps02 import content, learner_model as lm, llm, srs
+from app.ps02 import content, learner_model as lm, llm, llm_stream, srs
 
 log = logging.getLogger(__name__)
 MAX_TURNS = 4
@@ -36,7 +36,8 @@ Rules:
   "resolved" (they explained the correct idea clearly in their own words; repeating your hint back, or a bare "yes/ok", is NOT resolved).
 - If the student's FIRST reply is already clearly correct and complete, mark it "resolved" straight away (confirm warmly, do not make them go through more questions).
 - still_holds_misconception is true while they still believe the wrong idea. Be kind; never say "wrong" harshly.
-Return ONLY JSON: {"understanding": "none|partial|resolved", "still_holds_misconception": bool, "next_move": "hint|question|counterexample|confirm", "say": str}"""
+Return ONLY JSON with the keys in EXACTLY this order (what you say is shown as you write it, so understanding comes first, then say):
+{"understanding": "none|partial|resolved", "say": str, "still_holds_misconception": bool, "next_move": "hint|question|counterexample|confirm"}"""
 
 
 class Verdict(BaseModel):
@@ -91,20 +92,28 @@ def _save(row_id: int, transcript: list, status: str, turns: int) -> None:
 
 
 # ------------------------------------------------------------------ start
-def start(student_id: int, attempt_id: int, language: str = "hinglish") -> dict:
-    att = db.one("SELECT * FROM attempts WHERE id=? AND student_id=?", (attempt_id, student_id))
-    if not att:
-        raise KeyError("attempt not found")
-    mc_id = att["misconception_id"]
+def start(student_id: int, attempt_id: int | None, language: str = "hinglish", misconception_id: str | None = None, concept_id: str | None = None) -> dict:
+    """Open a dialogue about the misconception found in an attempt, or (attempt_id=None) directly about a misconception, e.g. a root cause from the map."""
+    if attempt_id is not None:
+        att = db.one("SELECT * FROM attempts WHERE id=? AND student_id=?", (attempt_id, student_id))
+        if not att:
+            raise KeyError("attempt not found")
+        mc_id, concept_id = att["misconception_id"], att["concept_id"]
+        existing = db.one("SELECT * FROM dialogues WHERE attempt_id=? AND student_id=? ORDER BY id DESC LIMIT 1", (attempt_id, student_id))
+    else:
+        mc_id = misconception_id
+        if concept_id not in content.concepts():
+            raise ValueError("a concept is required")
+        existing = db.one("SELECT * FROM dialogues WHERE attempt_id IS NULL AND student_id=? AND misconception_id=? AND concept_id=? AND status='open' ORDER BY id DESC LIMIT 1",
+                          (student_id, mc_id, concept_id))
     if not mc_id or mc_id == "NONE" or mc_id not in content.misconceptions():
-        raise ValueError("no misconception to work on for this attempt")
-    existing = db.one("SELECT * FROM dialogues WHERE attempt_id=? AND student_id=? ORDER BY id DESC LIMIT 1", (attempt_id, student_id))
+        raise ValueError("no misconception to work on")
     if existing:
         return _public(existing)
     mc = content.misconceptions()[mc_id]
     opener = {"role": "tutor", "text": _probe(mc, language), "move": "question"}
     row_id = db.execute("INSERT INTO dialogues (student_id, attempt_id, concept_id, misconception_id, language, status, student_turns, transcript, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                        (student_id, attempt_id, att["concept_id"], mc_id, language, "open", 0, json.dumps([opener], ensure_ascii=False), _now(), _now()))
+                        (student_id, attempt_id, concept_id, mc_id, language, "open", 0, json.dumps([opener], ensure_ascii=False), _now(), _now()))
     return _public(_load(row_id, student_id), say=opener["text"])
 
 
@@ -180,16 +189,19 @@ def _give_up(student_id: int, row: dict, language: str) -> dict:
 
 
 # ------------------------------------------------------------------ reply
-def reply(student_id: int, dialogue_id: int, text: str, mode: str = "text", language: str | None = None) -> dict:
+def _prepare(student_id: int, dialogue_id: int, text: str, mode: str, language: str | None):
+    """Load the dialogue and add the student's turn. Returns (row, mc, transcript, turn, language), or a finished public dict if it is already closed."""
     row = _load(dialogue_id, student_id)
     if row["status"] != "open":
         return _public(row)
     language = language or row["language"] or "hinglish"
-    mc = content.misconceptions()[row["misconception_id"]]
     transcript = json.loads(row["transcript"])
-    turn = row["student_turns"] + 1
     transcript.append({"role": "student", "text": text.strip()[:600], "mode": mode if mode in ("voice", "text") else "text"})
-    verdict, source = _judge(mc, transcript, language, turn)
+    return row, content.misconceptions()[row["misconception_id"]], transcript, row["student_turns"] + 1, language
+
+
+def _finish(student_id: int, row: dict, mc: dict, transcript: list, turn: int, language: str, verdict: Verdict, source: str) -> dict:
+    """Apply the judge's verdict: resolve (BKT jump, capped), or give up after four turns (explain + early review), or ask the next question."""
     transcript[-1]["understanding"] = verdict.understanding
     extra: dict = {"verdict": {**verdict.model_dump(), "source": source}}
 
@@ -214,3 +226,40 @@ def reply(student_id: int, dialogue_id: int, text: str, mode: str = "text", lang
     transcript.append({"role": "tutor", "text": say, "move": verdict.next_move})
     _save(row["id"], transcript, "open", turn)
     return _public(_load(row["id"], student_id), say=say, extra=extra)
+
+
+def reply(student_id: int, dialogue_id: int, text: str, mode: str = "text", language: str | None = None) -> dict:
+    prepared = _prepare(student_id, dialogue_id, text, mode, language)
+    if isinstance(prepared, dict):
+        return prepared
+    row, mc, transcript, turn, language = prepared
+    verdict, source = _judge(mc, transcript, language, turn)
+    return _finish(student_id, row, mc, transcript, turn, language, verdict, source)
+
+
+def reply_events(student_id: int, dialogue_id: int, text: str, mode: str = "text", language: str | None = None):
+    """Streaming reply: yields ("delta", text) while Eklavya's answer is being written, then ("final", public result). If the models fail
+    partway, a ("replace", text) event swaps the partial text for the fallback hint before the final result."""
+    prepared = _prepare(student_id, dialogue_id, text, mode, language)
+    if isinstance(prepared, dict):
+        yield ("final", prepared)
+        return
+    row, mc, transcript, turn, language = prepared
+    verdict, source, streamed = None, "ai", False
+    try:
+        raw = None
+        for kind, value in llm_stream.stream_json(SYSTEM, _judge_prompt(mc, transcript, language, turn), "say", ("understanding", "say"), 0.4, deadline_s=JUDGE_DEADLINE_S + 2, hedge_after_s=1.2):
+            if kind == "delta":
+                streamed = True
+                yield ("delta", value)
+            else:
+                raw = value
+        verdict = Verdict(**raw)
+        if verdict.understanding == "resolved":
+            verdict.still_holds_misconception = False
+    except (ValidationError, ValueError, TypeError, gemini.LLMError) as exc:
+        log.warning("Socratic stream fell back to the heuristic: %s", str(exc)[:200])
+        verdict, source = _heuristic(mc, transcript, language, turn), "heuristic"
+        if streamed:
+            yield ("replace", verdict.say)
+    yield ("final", _finish(student_id, row, mc, transcript, turn, language, verdict, source))

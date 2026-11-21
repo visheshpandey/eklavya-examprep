@@ -1,6 +1,6 @@
 // "Eklavya talks you out of it": a short Socratic voice chat that helps the student un-learn a misconception.
 // The tutor asks guiding questions and never gives the answer; it counts as fixed only when the student explains the idea in their own words.
-import { api } from '../api.js';
+import { api, apiStream } from '../api.js';
 import { h } from '../dom.js';
 import { createDictation } from '../../lib/dictation.js';
 import { getLang } from '../state.js';
@@ -12,7 +12,7 @@ const STEPS = [['holds', 'Still holds it'], ['wavering', 'Wavering'], ['resolved
  * mountDialogue({ student, attempt_id, misconception, onDone, onUnavailable }) returns the element to insert.
  * onDone(result) fires once, when the dialogue is resolved, unresolved after 4 turns, or skipped.
  */
-export function mountDialogue({ student, attemptId, onDone, onUnavailable }) {
+export function mountDialogue({ student, attemptId = null, misconceptionId = null, conceptId = null, onDone, onUnavailable }) {
   let state = null, busy = false, finished = false, usedVoice = false, muted = isMuted();
   const language = () => getLang();
 
@@ -80,10 +80,20 @@ export function mountDialogue({ student, attemptId, onDone, onUnavailable }) {
     bubble('student', value);
     typing(true);
     try {
-      const r = await api('/api/dialogue/reply', { method: 'POST', body: { student_id: student.id, dialogue_id: state.dialogue_id, text: value, mode: usedVoice ? 'voice' : 'text', language: language() }, timeout: 30000 });
+      // the tutor's words appear as the model writes them (first words in about a second), then the final result settles everything
+      let live = null, final = null;
+      const showLive = (text) => { if (!live) { typing(false); live = bubble('tutor', '').querySelector('p'); } live.textContent = text; chat.scrollTop = chat.scrollHeight; };
+      let acc = '';
+      await apiStream('/api/dialogue/reply/stream', { student_id: student.id, dialogue_id: state.dialogue_id, text: value, mode: usedVoice ? 'voice' : 'text', language: language() }, (ev) => {
+        if (ev.type === 'delta') { acc += ev.text; showLive(acc); }
+        else if (ev.type === 'replace') { acc = ev.text; showLive(acc); }
+        else if (ev.type === 'final') final = ev.result;
+      }, { timeout: 40000 });
       typing(false);
+      const r = final;
       const last = r.transcript[r.transcript.length - 1];
-      bubble('tutor', last.text, r.status === 'open' ? last.move : null);
+      if (live) { live.textContent = last.text; if (r.status === 'open' && last.move) live.parentElement.append(h('small', { class: 'move' }, last.move)); }
+      else bubble('tutor', last.text, r.status === 'open' ? last.move : null);
       if (!muted) speak(last.text, language());
       paint(r);
       usedVoice = false;
@@ -111,7 +121,7 @@ export function mountDialogue({ student, attemptId, onDone, onUnavailable }) {
 
   (async () => {
     try {
-      const s = await api('/api/dialogue/start', { method: 'POST', body: { student_id: student.id, attempt_id: attemptId, language: language() }, timeout: 20000 });
+      const s = await api('/api/dialogue/start', { method: 'POST', body: attemptId ? { student_id: student.id, attempt_id: attemptId, language: language() } : { student_id: student.id, misconception_id: misconceptionId, concept_id: conceptId, language: language() }, timeout: 20000 });
       s.transcript.forEach((t) => bubble(t.role, t.text, t.role === 'tutor' ? t.move : null));
       paint(s);
       if (!muted) speak(s.transcript[0].text, language());

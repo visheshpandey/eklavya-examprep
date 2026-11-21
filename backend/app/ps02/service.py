@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app import db
-from app.ps02 import calibration, content, learner_model as lm, misconception, notes as notes_mod, question_gen, srs
+from app.ps02 import agent, calibration, content, learner_model as lm, misconception, notes as notes_mod, question_gen, srs
 
 FAST_SECONDS = 20
 CHECK_EVERY = 4     # ask for reasoning on about 1 in 4 correct answers, to catch lucky guesses
@@ -156,27 +156,15 @@ def _last_concept(student_id: int) -> str | None:
 
 
 def plan_next(student_id: int, review: bool = False, concept_id: str | None = None) -> dict:
-    """Decide WHAT to ask next (deterministic): concept, difficulty and the explanation shown to the student."""
-    mastery = lm.get_mastery(student_id)
-    if concept_id and concept_id in mastery:
-        cid, reason = concept_id, "You picked this concept. "
-    else:
-        cid, reason = None, ""
-        if review:
-            due = [r for r in srs.due_reviews(student_id) if r["due"]]
-            if due:
-                cid, reason = due[0]["concept_id"], "This concept is due for review (spaced repetition). "
-        if not cid:
-            options = lm.frontier_weakest(mastery, 3)
-            last = _last_concept(student_id)
-            cid = next((c for c in options if c != last), options[0])
-    difficulty, why = calibration.target_difficulty(student_id, cid, mastery[cid])
-    return {"concept_id": cid, "difficulty": difficulty, "why": (reason + why).strip()}
+    """Decide WHAT to ask next. The tutor agent (app/ps02/agent.py) does it as logged tool calls: mastery -> pick concept -> trace root cause -> difficulty."""
+    return agent.decide_next(student_id, review, concept_id)
 
 
 def public_question(question_id: str, q: dict, plan: dict) -> dict:
     return {"question_id": question_id, "concept_id": q["concept_id"], "concept_name": content.concepts()[q["concept_id"]]["name"], "chapter": content.concepts()[q["concept_id"]]["chapter"],
-            "difficulty": q["difficulty"], "stem": q["stem"], "options": q["options"], "why": plan["why"], "source": q.get("source", "ai"), "note": q.get("note")}
+            "difficulty": q["difficulty"], "stem": q["stem"], "options": q["options"], "why": plan["why"], "source": q.get("source", "ai"), "note": q.get("note"),
+            "trace": plan.get("trace", []), "root_cause": plan.get("root_cause") and {"concept_id": plan["root_cause"]["root"]["concept_id"], "name": plan["root_cause"]["root"]["name"],
+                                                                                  "misconception": plan["root_cause"]["root"]["misconception"], "from": plan["root_cause"]["concept_id"], "applied": bool(plan.get("root_applied"))}}
 
 
 def _store_question(student_id: int, q: dict) -> str:
@@ -194,11 +182,14 @@ def _load_question(question_id: str) -> dict | None:
 def next_question(student_id: int, review: bool = False, concept_id: str | None = None) -> dict:
     plan = plan_next(student_id, review, concept_id)
     cid, diff = plan["concept_id"], plan["difficulty"]
+    started = time.perf_counter()
     q = question_gen.take_prefetched(student_id, cid, diff, wait_seconds=10)
+    prefetched = q is not None
     if q is None:
         active = [m["id"] for m in active_misconceptions(student_id) if cid in content.misconceptions()[m["id"]]["concept_ids"]]
         q = question_gen.generate(cid, diff, active, _recent_stems(student_id), _notes_ctx(student_id, cid))   # only on a prefetch miss
     q = {**q, "difficulty": diff}   # the badge, the stored question, BKT and the "why" line all use the planner's one difficulty value
+    plan = {**plan, "trace": plan["trace"] + agent.steps_for_generation(q, prefetched, round((time.perf_counter() - started) * 1000))}
     return public_question(_store_question(student_id, q), q, plan)
 
 
@@ -226,7 +217,7 @@ def answer(student_id: int, question_id: str, chosen_index: int, elapsed_seconds
             "needs_reasoning": (not correct) or check, "reasoning_kind": "wrong" if not correct else ("check" if check else None),
             "reasoning_prompt": ("Why did you pick this? Explain your thinking in your own words, in any language." if not correct
                                  else "Nice! Quick check: how did you get this?" if check else None),
-            "mastery_changes": result["deltas"], "review": result["review"]}
+            "mastery_changes": result["deltas"], "review": result["review"], "trace": agent.steps_for_answer(result, correct, result.get("misconception_prior"))}
 
 
 def _restore_srs(student_id: int, concept_id: str, row: dict | None) -> None:
@@ -236,7 +227,7 @@ def _restore_srs(student_id: int, concept_id: str, row: dict | None) -> None:
                    (student_id, concept_id, row["easiness"], row["interval_days"], row["repetitions"], row["due_at"]))
 
 
-def apply_reasoning(student_id: int, attempt_id: int, reasoning: str, mode: str = "text", when: datetime | None = None) -> dict:
+def apply_reasoning(student_id: int, attempt_id: int, reasoning: str, mode: str = "text", when: datetime | None = None, diag: dict | None = None, language: str = "hinglish") -> dict:
     """Classify the student's explanation, then replace the provisional update from ``answer`` with the informed one."""
     att = db.one("SELECT * FROM attempts WHERE id=? AND student_id=?", (attempt_id, student_id))
     if not att:
@@ -246,7 +237,7 @@ def apply_reasoning(student_id: int, attempt_id: int, reasoning: str, mode: str 
     cid, correct = att["concept_id"], bool(att["correct"])
     prior = None if correct else q.get("distractor_misconceptions", {}).get(str(att["chosen_index"]))
 
-    diag = misconception.classify(q, att["chosen_index"], reasoning, cid, prior)
+    diag = diag or misconception.classify(q, att["chosen_index"], reasoning, cid, prior, language)
     careless = (not correct) and bool(diag["is_careless_error"])
     lucky = correct and not diag["reasoning_sound"]
     mc = None if correct else (diag["misconception_id"] if diag["misconception_id"] not in ("NONE",) else None)
@@ -267,9 +258,27 @@ def apply_reasoning(student_id: int, attempt_id: int, reasoning: str, mode: str 
     if not correct and confident_mc:
         _note_misconception(student_id, confident_mc, diag["evidence"] or reasoning, when)
     _prefetch_after(student_id)
-    return {"attempt_id": attempt_id, "diagnosis": {**diag, "misconception_id": final_mc or "NONE", "is_careless_error": careless},
-            "misconception": misconception_card(final_mc) if final_mc and final_mc != "MC_UNKNOWN" else None,
-            "lucky_guess": lucky, "mastery_changes": deltas, "review": review}
+    out = {"attempt_id": attempt_id, "diagnosis": {**diag, "misconception_id": final_mc or "NONE", "is_careless_error": careless},
+           "misconception": misconception_card(final_mc) if final_mc and final_mc != "MC_UNKNOWN" else None,
+           "lucky_guess": lucky, "mastery_changes": deltas, "review": review}
+    out["trace"] = agent.steps_for_reasoning(out)
+    return out
+
+
+def reasoning_events(student_id: int, attempt_id: int, reasoning: str, mode: str = "text", language: str = "hinglish"):
+    """Streaming version of apply_reasoning: ("quick", diagnosis) at once, ("delta", text) while the AI writes, then ("final", the full result)."""
+    att = db.one("SELECT * FROM attempts WHERE id=? AND student_id=?", (attempt_id, student_id))
+    if not att:
+        raise KeyError("attempt not found")
+    q = json.loads(att["question_json"])
+    prior = None if att["correct"] else q.get("distractor_misconceptions", {}).get(str(att["chosen_index"]))
+    diag = None
+    for kind, value in misconception.classify_events(q, att["chosen_index"], reasoning, att["concept_id"], prior, language):
+        if kind == "final":
+            diag = value
+        else:
+            yield (kind, value)
+    yield ("final", apply_reasoning(student_id, attempt_id, reasoning, mode, diag=diag, language=language))
 
 
 # ------------------------------------------------------------------ student views

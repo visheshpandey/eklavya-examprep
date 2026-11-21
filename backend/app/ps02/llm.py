@@ -18,7 +18,7 @@ API_MIN_TIMEOUT_MS = 10000          # Gemini rejects any shorter per-request dea
 _pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="ps02-llm")
 
 
-def hedged_json(system: str, prompt: str, required_keys=(), temperature: float = 0.5, deadline_s: float = 8.0, hedge_after_s: float = 3.5):
+def hedged_json(system: str, prompt: str, required_keys=(), temperature: float = 0.5, deadline_s: float = 8.0, hedge_after_s: float = 2.0):
     start = time.monotonic()
     timeout_ms = max(API_MIN_TIMEOUT_MS, int(deadline_s * 1000) + 2000)
     live = {_pool.submit(gemini.llm_json, system, prompt, required_keys, temperature, timeout_ms): "primary"}

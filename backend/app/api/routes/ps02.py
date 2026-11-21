@@ -1,8 +1,11 @@
 """Eklavya Exam Prep (PS02) endpoints. Students are identified by ``student_id`` (no login: this is the hackathon demo)."""
+import json
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.ps02 import learner_model as lm, seed, service, socratic, srs, teacher
+from app.ps02 import content, learner_model as lm, rootcause, seed, service, socratic, srs, teacher
 
 router = APIRouter()
 
@@ -22,6 +25,19 @@ class DiagSubmit(BaseModel):
     answers: list[DiagAnswer]
 
 
+def ndjson(events):
+    """Newline-delimited JSON, flushed as each event is produced, so the browser can show text while the model is still writing."""
+    def gen():
+        try:
+            for event in events:
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except KeyError:
+            yield json.dumps({"type": "error", "message": "Not found"}) + "\n"
+        except Exception:  # noqa: BLE001 - tell the client instead of cutting the stream
+            yield json.dumps({"type": "error", "message": "Something went wrong. Please try again."}) + "\n"
+    return StreamingResponse(gen(), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 class AnswerIn(BaseModel):
     student_id: int
     question_id: str
@@ -34,11 +50,14 @@ class ReasoningIn(BaseModel):
     attempt_id: int
     reasoning_text: str = Field(min_length=1, max_length=1500)
     reasoning_mode: str = Field(default="text", pattern="^(voice|text)$")
+    language: str = Field(default="hinglish", pattern="^(hinglish|english|hindi)$")
 
 
 class DialogueStart(BaseModel):
     student_id: int
-    attempt_id: int
+    attempt_id: int | None = None        # a wrong attempt, or None to start from a misconception directly ("fix the root first")
+    misconception_id: str | None = None
+    concept_id: str | None = None
     language: str = Field(default="hinglish", pattern="^(hinglish|english|hindi)$")
 
 
@@ -109,7 +128,7 @@ def practice_answer(body: AnswerIn):
 def practice_reasoning(body: ReasoningIn):
     _student(body.student_id)
     try:
-        return service.apply_reasoning(body.student_id, body.attempt_id, body.reasoning_text.strip(), body.reasoning_mode)
+        return service.apply_reasoning(body.student_id, body.attempt_id, body.reasoning_text.strip(), body.reasoning_mode, language=body.language)
     except KeyError:
         raise HTTPException(404, "Attempt not found")
 
@@ -118,7 +137,7 @@ def practice_reasoning(body: ReasoningIn):
 def dialogue_start(body: DialogueStart):
     _student(body.student_id)
     try:
-        return socratic.start(body.student_id, body.attempt_id, body.language)
+        return socratic.start(body.student_id, body.attempt_id, body.language, body.misconception_id, body.concept_id)
     except KeyError:
         raise HTTPException(404, "Attempt not found")
     except ValueError as exc:
@@ -134,10 +153,50 @@ def dialogue_reply(body: DialogueReply):
         raise HTTPException(404, "Dialogue not found")
 
 
+def _trace_for(student_id: int, concept_id: str) -> dict:
+    return rootcause.trace(concept_id, lm.get_mastery(student_id), service.active_misconceptions(student_id))
+
+
+@router.get("/api/ps02/struggles")
+def struggles(student_id: int, language: str = "hinglish"):
+    """The concepts the student keeps failing, each with its traced root cause (a plain-template sentence; the AI sentence is /root-cause)."""
+    _student(student_id)
+    out = []
+    for cid in rootcause.struggling(student_id):
+        t = _trace_for(student_id, cid)
+        out.append({**t, "explanation": rootcause.template(t, language), "explanation_source": "template"})
+    return {"struggles": out}
+
+
+@router.get("/api/ps02/root-cause")
+def root_cause(student_id: int, concept_id: str, language: str = "hinglish"):
+    _student(student_id)
+    if concept_id not in content.concepts():
+        raise HTTPException(404, "Unknown concept")
+    t = _trace_for(student_id, concept_id)
+    text, source = rootcause.explain(t, language)
+    return {**t, "explanation": text, "explanation_source": source}
+
+
 @router.get("/api/mastery")
 def mastery(student_id: int):
     s = _student(student_id)
     return {"student": s, **service.mastery_view(student_id)}
+
+
+@router.post("/api/practice/reasoning/stream")
+def practice_reasoning_stream(body: ReasoningIn):
+    """Same result as /api/practice/reasoning, streamed: quick (first impression) -> delta (the AI's feedback as it is written) -> final."""
+    _student(body.student_id)
+    return ndjson({"type": kind, **({"text": v} if kind == "delta" else {"diagnosis": v} if kind == "quick" else {"result": v})}
+                  for kind, v in service.reasoning_events(body.student_id, body.attempt_id, body.reasoning_text.strip(), body.reasoning_mode, body.language))
+
+
+@router.post("/api/dialogue/reply/stream")
+def dialogue_reply_stream(body: DialogueReply):
+    _student(body.student_id)
+    return ndjson({"type": kind, **({"text": v} if kind in ("delta", "replace") else {"result": v})}
+                  for kind, v in socratic.reply_events(body.student_id, body.dialogue_id, body.text, body.mode, body.language))
 
 
 @router.get("/api/mastery/history")

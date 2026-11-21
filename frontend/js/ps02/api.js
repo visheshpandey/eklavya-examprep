@@ -56,4 +56,34 @@ export async function apiUpload(path, formData, { timeout = 120000 } = {}) {
   } finally { clearTimeout(timer); }
 }
 
+/** POST and read a newline-delimited JSON stream, calling onEvent for each event as it arrives. Throws ApiError on an {type:'error'} event. */
+export async function apiStream(path, body, onEvent, { timeout = 60000 } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(API_BASE + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
+    if (!res.ok) {
+      let detail = '';
+      try { const j = await res.json(); detail = j.detail || j.message || ''; } catch { /* not json */ }
+      if (res.status === 404 && /student not found/i.test(String(detail))) globalThis.dispatchEvent(new CustomEvent('ps02:student-gone'));
+      throw new ApiError(typeof detail === 'string' && detail ? detail : `The server answered ${res.status}.`, res.status);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const emit = (line) => { if (!line.trim()) return; const ev = JSON.parse(line); if (ev.type === 'error') throw new ApiError(ev.message || 'Something went wrong.'); onEvent(ev); };
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buffer.indexOf('\n')) >= 0) { emit(buffer.slice(0, nl)); buffer = buffer.slice(nl + 1); }
+    }
+    emit(buffer);
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(err.name === 'AbortError' ? 'This is taking longer than usual. Please try again.' : 'Could not reach the server. Check your connection and try again.');
+  } finally { clearTimeout(timer); }
+}
+
 export const qs = (params) => new URLSearchParams(params).toString();

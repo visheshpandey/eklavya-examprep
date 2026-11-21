@@ -2,7 +2,7 @@
 // Wide screens get the SVG graph; phones get the same nodes as a chapter-grouped list. Both open the same detail panel.
 import { api, qs } from '../api.js';
 import { h, s } from '../dom.js';
-import { getStudent } from '../state.js';
+import { getLang, getStudent } from '../state.js';
 import { countUp, level, loading, masteryColors, pct, sparkline } from '../ui.js';
 
 const CHAPTERS = ['Light', 'Human Eye', 'Electricity', 'Magnetism'];
@@ -132,6 +132,38 @@ export async function mapScreen(root, ctx) {
     } catch { spark.replaceChildren(h('p', { class: 'muted small' }, 'History is unavailable right now.')); }
   }
 
+  // ---------- root cause: when the student keeps failing a concept, trace back to the real cause and draw the path on the map
+  const rcBox = h('section', { class: 'card root-card', hidden: true, 'aria-live': 'polite' });
+  function showPath(t) {
+    nodeEls.forEach((g) => g.classList.remove('on-path', 'root-cause', 'struggling'));
+    edgeEls.forEach(({ path }) => path.classList.remove('edge-root'));
+    if (!t || !t.root) return;
+    t.path.forEach((id) => nodeEls.get(id)?.classList.add('on-path'));
+    nodeEls.get(t.concept_id)?.classList.add('struggling');
+    nodeEls.get(t.root.concept_id)?.classList.add('root-cause');
+    for (let i = 0; i < t.path.length - 1; i++) edgeEls.filter(({ e }) => e.from === t.path[i + 1] && e.to === t.path[i]).forEach(({ path }) => path.classList.add('edge-root'));
+  }
+  async function loadStruggles() {
+    if (teacherView) return;
+    try {
+      const { struggles } = await api(`/api/ps02/struggles?${qs({ student_id: studentId, language: getLang() })}`, { timeout: 15000 });
+      const t = struggles.find((s) => s.root);
+      if (!t || !ctx.live()) return;
+      const mcId = t.root.misconception?.id;
+      const sentence = h('p', { class: 'lede-small' }, t.explanation);
+      rcBox.hidden = false;
+      rcBox.replaceChildren(h('p', { class: 'eyebrow' }, 'Root cause found'), h('h2', null, `${t.name} keeps going wrong`), sentence,
+        h('p', { class: 'small muted' }, `${t.path.map((id) => byId[id].short || byId[id].name).join(' → ')}  (the line on the map)`),
+        h('div', { class: 'row' }, h('a', { class: 'btn btn-primary', href: `#/practice?concept=${t.root.concept_id}${mcId ? `&talk=${mcId}` : ''}` }, 'Fix the root first'),
+          h('button', { class: 'btn', type: 'button', onClick: () => { showPath(null); requestAnimationFrame(() => showPath(t)); } }, 'Replay the path'),
+          h('button', { class: 'btn btn-quiet', type: 'button', onClick: () => { rcBox.hidden = true; showPath(null); } }, 'Hide')));
+      showPath(t);
+      // upgrade the sentence to the AI-written one when it arrives (the plain one is already on screen)
+      api(`/api/ps02/root-cause?${qs({ student_id: studentId, concept_id: t.concept_id, language: getLang() })}`, { timeout: 12000 })
+        .then((r) => { if (ctx.live() && r.explanation) sentence.textContent = r.explanation; }).catch(() => {});
+    } catch { /* the banner is an extra: the map works without it */ }
+  }
+
   // ---------- header
   const avg = nodes.reduce((a, n) => a + n.p_known, 0) / nodes.length;
   const weakest = data.weakest.map((id) => byId[id]);
@@ -148,7 +180,9 @@ export async function mapScreen(root, ctx) {
       h('div', { class: 'chips' }, weakest.map((n) => h('a', { class: 'chip chip-action', href: `#/practice?concept=${n.id}` }, `${n.short} · ${pct(n.p_known)}`))),
       h('div', { class: 'row' }, h('a', { class: 'btn btn-primary', href: '#/practice' }, 'Start practising'),
         dueCount > 0 && h('a', { class: 'btn', href: '#/reviews' }, `${dueCount} review${dueCount > 1 ? 's' : ''} due`))),
+    rcBox,
     h('div', { class: 'map-grid' }, h('div', { class: 'card graph-card' }, svg, list), panel));
   if (reveal) history.replaceState(null, '', '#/map');
+  loadStruggles();
   if (!teacherView) api(`/api/practice/prefetch?${qs({ student_id: studentId })}`, { method: 'POST', timeout: 20000 }).catch(() => {});   // warm the first practice question
 }
