@@ -163,6 +163,11 @@ SCHEMA += PS02_SCHEMA
 
 # Columns added after the first release: (table, column, type). init_db adds any that an older database lacks.
 MIGRATIONS = (
+    ("students", "user_id", "INTEGER"),               # PS02: the original-Eklavya user behind a student (notes, doubts)
+    ("doubts", "student_id", "INTEGER"),              # PS02: which student asked, and what it was about
+    ("doubts", "concept_id", "TEXT"),
+    ("doubts", "misconception_id", "TEXT"),
+    ("doubts", "mode", "TEXT"),
     ("voice_sessions", "study_mode", "TEXT"),
     ("voice_sessions", "topic_id", "INTEGER"),
     ("users", "plan_snapshot", "TEXT"),               # the plan the planner agent last built (JSON), to see which days were missed

@@ -5,29 +5,15 @@ import { h } from '../dom.js';
 import { createDictation } from '../../lib/dictation.js';
 import { getLang } from '../state.js';
 import { deltaList } from './deltas.js';
+import { isMuted, setMuted, speak } from '../tts.js';
 
 const STEPS = [['holds', 'Still holds it'], ['wavering', 'Wavering'], ['resolved', 'Resolved']];
-const MUTE_KEY = 'ps02.mute';
-const readMute = () => { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; } };
-const writeMute = (v) => { try { localStorage.setItem(MUTE_KEY, v ? '1' : '0'); } catch { /* ignore */ } };
-
-/** Speak with the browser's own text-to-speech (Hindi voice for Hinglish/Hindi, Indian English otherwise). */
-function speak(text, language) {
-  const synth = globalThis.speechSynthesis;
-  if (!synth || !text) return;
-  synth.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = language === 'english' ? 'en-IN' : 'hi-IN';
-  u.rate = 0.95;
-  synth.speak(u);
-}
-
 /**
  * mountDialogue({ student, attempt_id, misconception, onDone, onUnavailable }) returns the element to insert.
  * onDone(result) fires once, when the dialogue is resolved, unresolved after 4 turns, or skipped.
  */
 export function mountDialogue({ student, attemptId, onDone, onUnavailable }) {
-  let state = null, busy = false, finished = false, usedVoice = false, muted = readMute();
+  let state = null, busy = false, finished = false, usedVoice = false, muted = isMuted();
   const language = () => getLang();
 
   const chat = h('div', { class: 'chat', role: 'log', 'aria-live': 'polite', 'aria-label': 'Conversation with Eklavya' });
@@ -38,8 +24,7 @@ export function mountDialogue({ student, attemptId, onDone, onUnavailable }) {
   const stepLabels = STEPS.map(([id, label]) => h('span', { class: 'track-step', dataset: { step: id } }, label));
   const track = h('div', { class: 'track', role: 'img', 'aria-label': 'Progress: still holds it' }, h('div', { class: 'track-bar' }, fill, marker), h('div', { class: 'track-steps' }, stepLabels));
   const muteBtn = h('button', { class: 'btn btn-quiet btn-small', type: 'button', 'aria-pressed': String(muted), onClick: () => {
-    muted = !muted; writeMute(muted); muteBtn.setAttribute('aria-pressed', String(muted)); muteBtn.textContent = muted ? '🔇 Voice off' : '🔊 Voice on';
-    if (muted) globalThis.speechSynthesis?.cancel();
+    muted = !muted; setMuted(muted); muteBtn.setAttribute('aria-pressed', String(muted)); muteBtn.textContent = muted ? '🔇 Voice off' : '🔊 Voice on';
   } }, muted ? '🔇 Voice off' : '🔊 Voice on');
 
   const status = h('p', { class: 'muted small', role: 'status' });

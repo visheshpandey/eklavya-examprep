@@ -201,8 +201,15 @@ def chunks_of_document(document_id: int):
     return db.query(_CHUNKS_SQL + "WHERE c.document_id = ?", (document_id,))
 
 
+def owners_of(user_id: int) -> list[int]:
+    """Whose notes a student sees: their own, plus the class notes a teacher uploaded for the student's PS02 class (a pseudo-user ``class:<section>``)."""
+    rows = db.query("SELECT c.id AS cid FROM students s JOIN users c ON c.email = ('class:' || s.class_section) WHERE s.user_id = ?", (user_id,))
+    return [user_id] + [r["cid"] for r in rows]
+
+
 def chunks_of_user(user_id: int):
-    return db.query(_CHUNKS_SQL + "WHERE d.user_id = ?", (user_id,))
+    owners = owners_of(user_id)
+    return db.query(_CHUNKS_SQL + f"WHERE d.user_id IN ({','.join('?' * len(owners))})", tuple(owners))
 
 
 def retrieve(document_id: int, query: str, k: int = RETRIEVAL_TOP_K, query_vector=None, vectors=None):
@@ -280,8 +287,10 @@ def count_chunks(user_id: int, document_id: int = None) -> int:
     """How many passages the student's notes (or one document) are made of."""
     if document_id:
         return db.one("SELECT COUNT(*) AS n FROM chunks WHERE document_id = ?", (document_id,))["n"]
-    return db.one("SELECT COUNT(*) AS n FROM chunks c JOIN documents d ON d.id = c.document_id WHERE d.user_id = ?", (user_id,))["n"]
+    owners = owners_of(user_id)
+    return db.one(f"SELECT COUNT(*) AS n FROM chunks c JOIN documents d ON d.id = c.document_id WHERE d.user_id IN ({','.join('?' * len(owners))})", tuple(owners))["n"]
 
 
 def has_notes(user_id: int) -> bool:
-    return db.one("SELECT 1 AS present FROM documents WHERE user_id = ? LIMIT 1", (user_id,)) is not None
+    owners = owners_of(user_id)
+    return db.one(f"SELECT 1 AS present FROM documents WHERE user_id IN ({','.join('?' * len(owners))}) LIMIT 1", tuple(owners)) is not None

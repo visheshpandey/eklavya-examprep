@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app import db
-from app.ps02 import calibration, content, learner_model as lm, misconception, question_gen, srs
+from app.ps02 import calibration, content, learner_model as lm, misconception, notes as notes_mod, question_gen, srs
 
 FAST_SECONDS = 20
 CHECK_EVERY = 4     # ask for reasoning on about 1 in 4 correct answers, to catch lucky guesses
@@ -141,6 +141,15 @@ def _recent_stems(student_id: int, n: int = 200) -> list[str]:
     return [json.loads(r["question_json"]).get("stem", "") for r in rows]
 
 
+def _notes_ctx(student_id: int, concept_id: str) -> dict | None:
+    """Relevant passages from the student's notes for this concept (None when they have no notes or the notes do not cover it)."""
+    try:
+        c = content.concepts()[concept_id]
+        return notes_mod.context_for(student_id, f"{c['name']} {c.get('short', '')} {c['description']} {' '.join(c['key_formulas'])}")
+    except Exception:  # noqa: BLE001 - notes only ever add to a question; never block it
+        return None
+
+
 def _last_concept(student_id: int) -> str | None:
     row = db.one("SELECT concept_id FROM attempts WHERE student_id=? AND phase='practice' ORDER BY id DESC LIMIT 1", (student_id,))
     return row["concept_id"] if row else None
@@ -167,7 +176,7 @@ def plan_next(student_id: int, review: bool = False, concept_id: str | None = No
 
 def public_question(question_id: str, q: dict, plan: dict) -> dict:
     return {"question_id": question_id, "concept_id": q["concept_id"], "concept_name": content.concepts()[q["concept_id"]]["name"], "chapter": content.concepts()[q["concept_id"]]["chapter"],
-            "difficulty": q["difficulty"], "stem": q["stem"], "options": q["options"], "why": plan["why"], "source": q.get("source", "ai")}
+            "difficulty": q["difficulty"], "stem": q["stem"], "options": q["options"], "why": plan["why"], "source": q.get("source", "ai"), "note": q.get("note")}
 
 
 def _store_question(student_id: int, q: dict) -> str:
@@ -188,7 +197,7 @@ def next_question(student_id: int, review: bool = False, concept_id: str | None 
     q = question_gen.take_prefetched(student_id, cid, diff, wait_seconds=10)
     if q is None:
         active = [m["id"] for m in active_misconceptions(student_id) if cid in content.misconceptions()[m["id"]]["concept_ids"]]
-        q = question_gen.generate(cid, diff, active, _recent_stems(student_id))
+        q = question_gen.generate(cid, diff, active, _recent_stems(student_id), _notes_ctx(student_id, cid))   # only on a prefetch miss
     q = {**q, "difficulty": diff}   # the badge, the stored question, BKT and the "why" line all use the planner's one difficulty value
     return public_question(_store_question(student_id, q), q, plan)
 
@@ -198,7 +207,7 @@ def _prefetch_after(student_id: int) -> None:
     try:
         plan = plan_next(student_id)
         active = [m["id"] for m in active_misconceptions(student_id) if plan["concept_id"] in content.misconceptions()[m["id"]]["concept_ids"]]
-        question_gen.prefetch(student_id, plan["concept_id"], plan["difficulty"], active, _recent_stems(student_id))
+        question_gen.prefetch(student_id, plan["concept_id"], plan["difficulty"], active, _recent_stems(student_id), _notes_ctx(student_id, plan["concept_id"]))
     except Exception:  # noqa: BLE001 - an optimisation only
         pass
 
@@ -269,10 +278,14 @@ def mastery_view(student_id: int) -> dict:
     graph = content.concepts()
     actives = active_misconceptions(student_id)
     due = {r["concept_id"] for r in srs.due_reviews(student_id) if r["due"]}
+    doubts_by: dict[str, list[dict]] = {}
+    for d in db.query("SELECT concept_id, question, misconception_id FROM doubts WHERE student_id=? AND concept_id IS NOT NULL ORDER BY id DESC", (student_id,)):
+        doubts_by.setdefault(d["concept_id"], []).append(d)
     nodes = []
     for cid, c in graph.items():
         mcs = [m for m in actives if cid in content.misconceptions()[m["id"]]["concept_ids"]]
-        nodes.append({**c, **details[cid], "misconceptions": mcs, "review_due": cid in due})
+        nodes.append({**c, **details[cid], "misconceptions": mcs, "review_due": cid in due,
+                      "doubts_count": len(doubts_by.get(cid, [])), "recent_doubts": doubts_by.get(cid, [])[:3]})
     return {"nodes": nodes, "edges": [{"from": p, "to": c["id"]} for c in graph.values() for p in c["prerequisites"]], "chapters": list({c["chapter"] for c in graph.values()}),
             "weakest": lm.frontier_weakest({k: v["p_known"] for k, v in details.items()}, 3), "time_travel": srs.time_travel()}
 

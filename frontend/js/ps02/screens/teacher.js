@@ -1,7 +1,8 @@
 // Teacher dashboard: class heatmap, concept gaps, top misconceptions with quotes, at-risk students, and the "Reteach tomorrow" plan.
-import { api } from '../api.js';
+import { api, qs } from '../api.js';
 import { h } from '../dom.js';
-import { errorCard, masteryColors, pct, skeleton } from '../ui.js';
+import { errorCard, masteryColors, pct, skeleton, toast } from '../ui.js';
+import { noteList, notesUploader } from './notes.js';
 
 const CHAPTERS = ['Light', 'Human Eye', 'Electricity', 'Magnetism'];
 
@@ -10,7 +11,7 @@ export async function teacher(root, ctx) {
   if (!ctx.live()) return;
   if (!ov.student_count) {
     root.replaceChildren(h('section', { class: 'narrow card center' }, h('h1', { class: 'page-title' }, 'No class yet'), h('p', null, 'Load the demo class to see the dashboard.'),
-      h('button', { class: 'btn btn-primary', type: 'button', onClick: async (e) => { e.target.disabled = true; await api('/api/demo/seed', { method: 'POST' }); location.reload(); } }, 'Load demo class')));
+      h('button', { class: 'btn btn-primary', type: 'button', onClick: async (e) => { e.target.disabled = true; await api('/api/demo/seed-class', { method: 'POST' }); location.reload(); } }, 'Load demo class')));
     return;
   }
   const classAvg = ov.heatmap.reduce((a, r) => a + r.average, 0) / ov.heatmap.length;
@@ -44,6 +45,24 @@ export async function teacher(root, ctx) {
     h('span', { class: 'muted small' }, `${pct(r.average)} average · ${r.active_misconceptions} active misconception${r.active_misconceptions === 1 ? '' : 's'}`),
     h('span', { class: 'small' }, `Weakest: ${r.weakest.map((w) => `${w.name} ${pct(w.p_known)}`).join(', ')}`)));
 
+  // ---- doubts asked
+  const dq = ov.doubts || { total: 0, by_concept: [], recent: [] };
+  const doubtsCard = h('section', { class: 'card' }, h('h2', null, `Doubts asked (${dq.total})`),
+    dq.total === 0 ? h('p', { class: 'muted' }, 'No doubts yet. Students ask them with the “Ask a doubt” button; each one is tagged to a concept.')
+      : h('div', null,
+        h('div', { class: 'chips' }, dq.by_concept.slice(0, 6).map((c) => h('span', { class: 'chip chip-action' }, `${c.name}: ${c.count}`))),
+        h('ul', { class: 'doubt-list' }, dq.recent.slice(0, 5).map((d) => h('li', null, h('span', { class: 'small' }, `“${d.question}”`),
+          h('span', { class: 'muted small' }, ` ${d.student} · ${d.concept_name || 'untagged'}`), d.misconception && h('span', { class: 'chip chip-bad' }, d.misconception))))));
+
+  // ---- class notes (the teacher uploads once; every student's answers and questions can use them)
+  const classNotes = h('div');
+  const loadNotes = async () => {
+    try {
+      const r = await api(`/api/ps02/class-notes?${qs({ class_section: ov.class_section })}`);
+      classNotes.replaceChildren(noteList(r.notes, Object.assign(async (n) => { await api(`/api/ps02/notes/${n.id}?${qs({ class_section: ov.class_section })}`, { method: 'DELETE' }); toast('Deleted.'); loadNotes(); }, { allowClass: true })));
+    } catch (err) { classNotes.replaceChildren(errorCard(err.message, loadNotes)); }
+  };
+
   // ---- reteach
   const reteachBox = h('div', { class: 'card reteach' }, h('p', { class: 'eyebrow' }, 'Reteach tomorrow'), h('h2', null, 'Planning your next lesson…'), h('p', { class: 'muted' }, 'The AI is reading the class data.'), skeleton(4));
   const loadReteach = async (refresh = false) => {
@@ -62,12 +81,15 @@ export async function teacher(root, ctx) {
     h('p', { class: 'eyebrow' }, `Teacher dashboard · Class ${ov.class_section}`), h('h1', { class: 'page-title' }, 'Where the whole class is stuck'),
     h('div', { class: 'stats' }, stat(ov.student_count, 'students'), stat(pct(classAvg), 'class mastery'), stat(ov.gaps.filter((g) => g.average < 0.5).length, 'concepts below 50%'), stat(holders.size, 'students with misconceptions')),
     reteachBox,
+    doubtsCard,
     h('section', { class: 'card' }, h('h2', null, 'Class heatmap'), h('p', { class: 'muted small' }, 'Students × concepts, % mastery. Click a name to open that student’s concept map.'), heat),
     h('div', { class: 'two-col' },
       h('section', { class: 'card' }, h('h2', null, 'Concept gaps'), h('p', { class: 'muted small' }, 'Class average per concept, weakest first.'), gaps),
       h('div', { class: 'stack' },
         h('section', { class: 'card' }, h('h2', null, 'Top misconceptions'), h('ul', { class: 'mc-list' }, mcs)),
         h('section', { class: 'card' }, h('h2', null, 'Students at risk'), h('ul', { class: 'risk-list' }, risk)))));
+  root.append(notesUploader({ section: ov.class_section, onDone: loadNotes }), h('section', { class: 'card' }, h('h2', null, 'Class notes'), classNotes));
+  loadNotes();
   loadReteach();
 }
 

@@ -97,8 +97,8 @@ class Settings:
     def from_env(cls) -> "Settings":
         return cls(
             gemini_api_key=_str("GEMINI_API_KEY"),
-            gemini_model=_str("GEMINI_MODEL", "gemini-3.1-flash-lite"),
-            gemini_fallback_model=_str("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash-lite"),
+            gemini_model=_str("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+            gemini_fallback_model=_str("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite"),
             gemini_live_model=_str("GEMINI_LIVE_MODEL", "gemini-3.8-live"),
             gemini_embed_model=_str("GEMINI_EMBED_MODEL", "gemini-embedding-001"),
             gemini_timeout_ms=_int("GEMINI_TIMEOUT_MS", 30_000, minimum=1_000),

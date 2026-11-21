@@ -109,7 +109,7 @@ def test_careless_error_penalised_less(monkeypatch):
 
 
 def test_seed_and_teacher_dashboard():
-    r = client.post("/api/demo/seed").json()
+    r = client.post("/api/demo/seed-class").json()
     assert len(r["students"]) == 6
     ov = client.get("/api/teacher/overview", params={"class_section": "10-B"}).json()
     assert ov["student_count"] == 6 and len(ov["heatmap"]) == 6 and len(ov["concepts"]) == 21
@@ -142,11 +142,11 @@ def test_time_travel_toggle():
 
 def test_unknown_student_is_404():
     assert client.get("/api/practice/next", params={"student_id": 99999}).status_code == 404
-    assert client.get("/api/health").json()["status"] == "ok"
+    assert client.get("/api/health").json() == {"ok": True}      # the original health route, not shadowed
 
 
 def test_new_student_joins_class_and_shows_on_heatmap():
-    client.post("/api/demo/seed")
+    client.post("/api/demo/seed-class")
     sid = client.post("/api/students", json={"name": "Newcomer"}).json()
     assert sid["class_section"] == "10-B"
     ov = client.get("/api/teacher/overview", params={"class_section": "10-B"}).json()

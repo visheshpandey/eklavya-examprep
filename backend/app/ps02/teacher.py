@@ -45,9 +45,18 @@ def overview(class_section: str | None = None) -> dict:
                     "average": round(sum(r["mastery"][c] for r in matrix) / n, 3),
                     "below_half": sum(1 for r in matrix if r["mastery"][c] < 0.5)} for c in order), key=lambda g: g["average"])
     mcs = content.misconceptions()
+    mcs_all = mcs
     top = sorted(({"id": mid, "label": mcs[mid]["label"], "description": mcs[mid]["description"], "concept_ids": mcs[mid]["concept_ids"], "students": len(v),
                    "examples": v[:3]} for mid, v in mc_students.items() if mid in mcs), key=lambda x: -x["students"])
-    return {"class_section": class_section, "student_count": len(students), "concepts": [{"id": c, "name": graph[c]["name"], "chapter": graph[c]["chapter"]} for c in order],
+    ids = [s["id"] for s in students]
+    marks = ",".join("?" * len(ids)) or "NULL"
+    counts = {r["concept_id"]: r["n"] for r in db.query(f"SELECT concept_id, COUNT(*) AS n FROM doubts WHERE student_id IN ({marks}) AND concept_id IS NOT NULL GROUP BY concept_id", tuple(ids))}
+    recent = db.query(f"SELECT d.question, d.concept_id, d.misconception_id, s.name AS student FROM doubts d JOIN students s ON s.id = d.student_id WHERE d.student_id IN ({marks}) ORDER BY d.id DESC LIMIT 8", tuple(ids))
+    doubts = {"total": db.one(f"SELECT COUNT(*) AS n FROM doubts WHERE student_id IN ({marks})", tuple(ids))["n"],
+              "by_concept": sorted(({"concept_id": c, "name": graph[c]["name"], "count": n} for c, n in counts.items()), key=lambda x: -x["count"]),
+              "recent": [{"student": r["student"], "question": r["question"], "concept_name": graph[r["concept_id"]]["name"] if r["concept_id"] else None,
+                          "misconception": mcs_all[r["misconception_id"]]["label"] if r["misconception_id"] in mcs_all else None} for r in recent]}
+    return {"class_section": class_section, "doubts": doubts, "student_count": len(students), "concepts": [{"id": c, "name": graph[c]["name"], "chapter": graph[c]["chapter"]} for c in order],
             "heatmap": matrix, "gaps": gaps, "top_misconceptions": top, "at_risk": sorted(risk, key=lambda r: -r["risk_score"])[:5]}
 
 

@@ -30,6 +30,7 @@ class GeneratedQuestion(BaseModel):
     difficulty: int = 2
     concept_id: str = ""
     explanation: str = ""
+    used_notes: bool = False
 
     @field_validator("options")
     @classmethod
@@ -65,7 +66,7 @@ Return ONLY JSON: {"stem": str, "options": [4 strings], "correct_index": 0-3, "d
 Difficulty 1 = direct recall or one step; 2 = a short calculation or a comparison; 3 = multi-step or a tricky case."""
 
 
-def _prompt(concept_id: str, difficulty: int, active_mcs: list[str], recent_stems: list[str]) -> str:
+def _prompt(concept_id: str, difficulty: int, active_mcs: list[str], recent_stems: list[str], notes: dict | None = None) -> str:
     c = content.concepts()[concept_id]
     mcs = content.misconceptions()
     pool = [m for m in mcs.values() if concept_id in m["concept_ids"]]
@@ -73,9 +74,21 @@ def _prompt(concept_id: str, difficulty: int, active_mcs: list[str], recent_stem
     listing = "\n".join(f'- {m["id"]}: {m["description"]}' for m in pool) or "- (none known; use MC_UNKNOWN)"
     formulas = ", ".join(c["key_formulas"]) or "none"
     avoid = "\n".join(f"- {s}" for s in recent_stems[:8]) or "- (none)"
-    return (f"Concept {concept_id}: {c['name']} ({c['chapter']}). {c['description']}\nKey formulas: {formulas}\n"
+    own = (f"\nThe student's OWN NOTES on this topic (set used_notes true and let the question's scenario and the explanation follow these notes when they fit, in the notes' terms; "
+           f"otherwise set used_notes false):\n{notes['text']}\n") if notes else ""
+    return (f"Concept {concept_id}: {c['name']} ({c['chapter']}). {c['description']}\nKey formulas: {formulas}\n{own}"
             f"Target difficulty: {difficulty}\nMisconceptions to build wrong options from:\n{listing}\n"
             f"The student currently holds: {', '.join(active_mcs) or 'nothing recorded'}\nStems already used (do not repeat):\n{avoid}")
+
+
+NOTE_OVERLAP = 0.2   # share of the question's content words that also appear in the retrieved passage
+
+
+def _overlaps_notes(question: dict, passage: str) -> bool:
+    """The model does not always set used_notes; a question whose stem and explanation share real vocabulary with the passage is grounded in it."""
+    from app.domain import retrieval
+    words = {w for w in retrieval.tokenize(f"{question['stem']} {question.get('explanation', '')}") if len(w) > 3}
+    return bool(words) and len(words & set(retrieval.tokenize(passage))) / len(words) >= NOTE_OVERLAP
 
 
 def _shuffle(q: GeneratedQuestion) -> dict:
@@ -89,11 +102,11 @@ def _shuffle(q: GeneratedQuestion) -> dict:
             "difficulty": q.difficulty, "concept_id": q.concept_id, "explanation": q.explanation.strip()}
 
 
-def generate(concept_id: str, difficulty: int, active_mcs: list[str] | None = None, recent_stems: list[str] | None = None) -> dict:
+def generate(concept_id: str, difficulty: int, active_mcs: list[str] | None = None, recent_stems: list[str] | None = None, notes: dict | None = None) -> dict:
     """Return a validated question dict. Tries the LLM twice; on failure falls back to a cached or hand-written question (``source`` says which)."""
     active_mcs, recent_stems = active_mcs or [], recent_stems or []
     seen = {s.strip() for s in recent_stems} | {q["stem"].strip() for q in content.diagnostic()}   # never repeat a stem the student saw, nor a diagnostic one
-    prompt = _prompt(concept_id, difficulty, active_mcs, recent_stems)
+    prompt = _prompt(concept_id, difficulty, active_mcs, recent_stems, notes)
     for attempt in (1, 2):
         try:
             raw = llm.hedged_json(SYSTEM, prompt, ("stem", "options", "correct_index"), 0.8 if attempt == 1 else 0.4, deadline_s=GEN_DEADLINE_S, hedge_after_s=5.0)
@@ -103,6 +116,7 @@ def generate(concept_id: str, difficulty: int, active_mcs: list[str] | None = No
                 continue
             out = _shuffle(q)
             out["source"] = "ai"
+            out["note"] = notes["citation"] if (notes and (q.used_notes or _overlaps_notes(out, notes["text"]))) else None   # cite only when the model used the passage or the wording clearly follows it
             with _lock:
                 _cache.setdefault(concept_id, []).append(out)
                 _cache[concept_id] = _cache[concept_id][-6:]
@@ -132,13 +146,13 @@ def fallback(concept_id: str, difficulty: int, recent_stems: list[str]) -> dict:
 
 
 # ---- background pre-generation: start the next question while the student is answering this one
-def prefetch(student_id: int, concept_id: str, difficulty: int, active_mcs: list[str], recent_stems: list[str]) -> None:
+def prefetch(student_id: int, concept_id: str, difficulty: int, active_mcs: list[str], recent_stems: list[str], notes: dict | None = None) -> None:
     key = (concept_id, difficulty)
     with _lock:
         existing = _prefetch.get(student_id)
         if existing and existing[0] == key:
             return
-        _prefetch[student_id] = (key, _pool_executor.submit(generate, concept_id, difficulty, active_mcs, recent_stems))
+        _prefetch[student_id] = (key, _pool_executor.submit(generate, concept_id, difficulty, active_mcs, recent_stems, notes))
 
 
 def take_prefetched(student_id: int, concept_id: str, difficulty: int, wait_seconds: float = 12.0) -> dict | None:

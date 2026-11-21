@@ -61,11 +61,6 @@ def _student(student_id: int) -> dict:
     return s
 
 
-@router.get("/api/health")
-def health():
-    return {"status": "ok", "service": "Eklavya Exam Prep"}
-
-
 @router.post("/api/students")
 def create_student(body: StudentIn):
     return service.create_student(body.name, body.class_section)
@@ -174,8 +169,9 @@ def teacher_reteach(class_section: str | None = None, refresh: bool = False):
     return teacher.reteach(class_section, force=refresh)
 
 
-@router.post("/api/demo/seed")
+@router.post("/api/demo/seed-class")
 def demo_seed():
+    """Rebuild the PS02 demo class 10-B. (The original Eklavya POST /api/demo/seed, which seeds a guest's demo notes, is left untouched.)"""
     return seed.reseed()
 
 

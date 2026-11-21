@@ -99,6 +99,7 @@ export async function mapScreen(root, ctx) {
   async function select(id) {
     selected = id;
     nodeEls.forEach((g, k) => g.classList.toggle('selected', k === id));
+    window.dispatchEvent(new CustomEvent('ps02:context', { detail: { concept_id: id } }));
     edgeEls.forEach(({ e, path }) => path.classList.toggle('edge-hot', e.from === id || e.to === id));
     const n = byId[id], c = masteryColors(n.p_known);
     const spark = h('div', { class: 'spark-wrap' }, h('p', { class: 'muted small' }, 'Loading history…'));
@@ -115,6 +116,10 @@ export async function mapScreen(root, ctx) {
           h('b', null, m.label), h('p', { class: 'small' }, m.description),
           m.quote && h('blockquote', { class: 'quote' }, `“${m.quote}”`), h('p', { class: 'small ok-text' }, m.correction))))
         : h('p', { class: 'muted small' }, 'No active misconceptions on this concept.'),
+      h('div', null, h('h3', null, `Doubts asked (${n.doubts_count || 0})`),
+        n.doubts_count ? n.recent_doubts.map((d) => h('p', { class: 'small doubt-row' }, `“${d.question}”`, d.misconception_id && h('span', { class: 'chip chip-bad' }, 'misconception')))
+          : h('p', { class: 'muted small' }, 'No doubts asked about this concept yet.'),
+        !teacherView && h('button', { class: 'btn btn-small', type: 'button', onClick: () => window.dispatchEvent(new CustomEvent('ps02:ask', { detail: { concept_id: n.id } })) }, 'Ask a doubt about this')),
       n.review_due && h('p', { class: 'chip chip-warn' }, 'A spaced-repetition review is due for this concept.'),
       !teacherView && h('a', { class: 'btn btn-primary', href: `#/practice?concept=${n.id}` }, 'Practise this'));
     if (matchMedia('(max-width: 899px)').matches) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });

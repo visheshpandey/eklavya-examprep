@@ -10,9 +10,11 @@ import { practice } from './screens/practice.js';
 import { reviews } from './screens/reviews.js';
 import { teacher } from './screens/teacher.js';
 import { how } from './screens/how.js';
+import { notes } from './screens/notes.js';
+import { mountAskWidget } from './ask-widget.js';
 
-const ROUTES = { '': landing, diagnostic, map: mapScreen, practice, reviews, teacher, student: mapScreen, how };
-const NEEDS_STUDENT = new Set(['diagnostic', 'map', 'practice', 'reviews']);
+const ROUTES = { '': landing, diagnostic, map: mapScreen, practice, reviews, teacher, student: mapScreen, how, notes };
+const NEEDS_STUDENT = new Set(['diagnostic', 'map', 'practice', 'reviews', 'notes']);
 const app = document.getElementById('app');
 let renderId = 0;
 
@@ -73,6 +75,8 @@ window.addEventListener('ps02:student-gone', () => {   // the saved student id n
 // A service worker from the old Eklavya build (same address while developing) would serve stale files: remove it.
 navigator.serviceWorker?.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
 globalThis.caches?.keys().then((keys) => keys.forEach((k) => globalThis.caches.delete(k))).catch(() => {});
+
+mountAskWidget();   // the floating "Ask a doubt" button lives on every screen
 
 const banner = document.getElementById('banner');
 warmUp(

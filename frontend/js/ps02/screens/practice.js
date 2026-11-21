@@ -6,6 +6,9 @@ import { getLang, getStudent, setLang } from '../state.js';
 import { errorCard, loading, skeleton } from '../ui.js';
 import { deltaList } from './deltas.js';
 import { mountDialogue } from './dialogue.js';
+import { speak, stop as stopSpeech } from '../tts.js';
+import { matchSpokenOption, questionToSpeech } from '../spoken-answer.js';
+import { listenOnce, readVoiceMode, voiceSupported, writeVoiceMode } from '../voice-io.js';
 
 const LANGS = [['hinglish', 'Hinglish'], ['english', 'English'], ['hindi', 'हिन्दी']];
 const DIFF = { 1: 'Easier', 2: 'Medium', 3: 'Harder' };
@@ -35,8 +38,16 @@ export async function practice(root, ctx) {
       stage.querySelector('.mc-card')?.dispatchEvent(new CustomEvent('lang'));
     } }, label)));
 
+  let voice = readVoiceMode();   // voice mode: questions read aloud, answer and reasoning by voice
+  const voiceBtn = h('button', { class: 'seg-btn toggle voice-toggle', type: 'button', 'aria-pressed': String(voice), disabled: !voiceSupported(),
+    title: voiceSupported() ? 'Hear each question, answer by voice, explain by voice' : 'Voice mode needs Chrome or Edge', onClick: () => {
+      voice = !voice; writeVoiceMode(voice); voiceBtn.setAttribute('aria-pressed', String(voice)); voiceBtn.textContent = voice ? '🎙 Voice mode: on' : '🎙 Voice mode: off';
+      if (!voice) stopSpeech();
+    } }, voice ? '🎙 Voice mode: on' : '🎙 Voice mode: off');
+  globalThis.addEventListener('hashchange', stopSpeech, { once: true });   // leaving the screen silences it
+
   root.replaceChildren(h('section', { class: 'narrow' },
-    h('div', { class: 'row between wrap' }, h('div', null, h('p', { class: 'eyebrow' }, review ? 'Spaced-repetition review' : 'Adaptive practice'), counter), langBar), stage));
+    h('div', { class: 'row between wrap' }, h('div', null, h('p', { class: 'eyebrow' }, review ? 'Spaced-repetition review' : 'Adaptive practice'), counter), h('div', { class: 'row tight' }, voiceBtn, langBar)), stage));
 
   async function nextQuestion() {
     if (review && done >= total) return summary();
@@ -76,15 +87,35 @@ export async function practice(root, ctx) {
     };
     document.addEventListener('keydown', onKey);
     const feedback = h('div', { class: 'feedback' });
+    const voiceStatus = h('p', { class: 'muted small', role: 'status' });
     stage.dataset.locked = '';
     stage.replaceChildren(h('div', { class: 'card question' },
       h('div', { class: 'q-meta' },
         h('span', { class: `pill diff-${q.difficulty}` }, `${DIFF[q.difficulty]} · level ${q.difficulty}`), h('span', { class: 'chip' }, `${q.chapter} · ${q.concept_name}`),
         q.source !== 'ai' && h('span', { class: 'chip', title: 'The AI was slow, so a prepared question was used' }, 'prepared question')),
       h('p', { class: 'why' }, h('b', null, 'Why this question? '), q.why),
-      h('h2', { class: 'stem' }, q.stem), h('div', { class: 'options', role: 'radiogroup', 'aria-label': 'Answer options' }, options), h('div', { class: 'row' }, submit)),
+      q.note && h('p', { class: 'cite cite-notes' }, '📄 From your notes: ', h('b', null, [q.note.file_name, q.note.heading || q.note.topic].filter(Boolean).join(' · '))),
+      h('h2', { class: 'stem' }, q.stem), h('div', { class: 'options', role: 'radiogroup', 'aria-label': 'Answer options' }, options),
+      h('div', { class: 'row' }, submit, h('button', { class: 'btn btn-quiet btn-small', type: 'button', onClick: () => speak(questionToSpeech(q), getLang(), { force: true }) }, '🔊 Read aloud')), voiceStatus),
       feedback);
     options[0].focus({ preventScroll: true });
+    window.dispatchEvent(new CustomEvent('ps02:context', { detail: { concept_id: q.concept_id } }));
+    if (voice) voiceAnswer();
+
+    // voice mode: read the question, listen for "A / B / option c / dusra / the option's own words", pick it and check it
+    async function voiceAnswer() {
+      await speak(questionToSpeech(q), getLang(), { force: true });
+      for (let tries = 0; tries < 2 && voice && ctx.live() && stage.dataset.locked !== q.question_id; tries++) {
+        voiceStatus.textContent = '🎙 Listening: say A, B, C or D…';
+        const said = await listenOnce({ language: getLang(), onInterim: (t) => { voiceStatus.textContent = `🎙 Heard: “${t}”`; } });
+        if (!ctx.live() || stage.dataset.locked === q.question_id) return;
+        const idx = matchSpokenOption(said, q.options);
+        if (idx !== null) { pick(idx); voiceStatus.textContent = `Option ${'ABCD'[idx]} selected.`; await speak(`Option ${'ABCD'[idx]}. Checking.`, getLang(), { force: true }); send(); return; }
+        voiceStatus.textContent = said ? `I heard “${said}” but could not match it to an option.` : 'I did not hear anything.';
+        await speak(said ? 'I did not catch that. Please say A, B, C or D.' : 'I did not hear you. Please say A, B, C or D.', getLang(), { force: true });
+      }
+      if (ctx.live() && stage.dataset.locked !== q.question_id) voiceStatus.textContent = 'Tap an option, or press Read aloud and say A, B, C or D.';
+    }
 
     async function send() {
       stage.dataset.locked = q.question_id; submit.disabled = true; submit.textContent = 'Checking…';
@@ -101,9 +132,11 @@ export async function practice(root, ctx) {
         submit.remove();
         const deltas = deltaList(a.mastery_changes, { title: a.correct ? 'Your mastery' : 'Your mastery (we’ll refine this after your explanation)' });
         feedback.replaceChildren(
-          h('div', { class: `result ${a.correct ? 'result-ok' : 'result-bad'}`, role: 'status' }, h('b', null, a.correct ? 'Correct!' : 'Not quite.'), ' ', a.explanation),
+          h('div', { class: `result ${a.correct ? 'result-ok' : 'result-bad'}`, role: 'status' }, h('b', null, a.correct ? 'Correct!' : 'Not quite.'), ' ', a.explanation,
+            q.note && h('p', { class: 'cite cite-notes' }, '📄 From your notes: ', h('b', null, [q.note.file_name, q.note.heading || q.note.topic].filter(Boolean).join(' · ')))),
           deltas);
-        if (a.needs_reasoning) reasoning(a, feedback); else finishRow(feedback);
+        const spoke = voice ? speak(`${a.correct ? 'Correct.' : 'Not quite.'} ${a.explanation}`, getLang(), { force: true }) : Promise.resolve();
+        if (a.needs_reasoning) reasoning(a, feedback, spoke); else finishRow(feedback, spoke);
       } catch (err) {
         submit.disabled = false; submit.textContent = 'Check answer'; options.forEach((o) => { o.disabled = false; }); stage.dataset.locked = '';
         feedback.replaceChildren(errorCard(err.message.includes('expired') ? 'That question expired. Let’s get a new one.' : err.message, nextQuestion));
@@ -111,13 +144,21 @@ export async function practice(root, ctx) {
     }
   }
 
-  function finishRow(box) {
-    const next = h('button', { class: 'btn btn-primary', type: 'button', onClick: () => { done += review ? 1 : 0; nextQuestion(); } }, review && done + 1 >= total ? 'Finish review' : 'Next question');
+  function finishRow(box, spoke = Promise.resolve()) {
+    const next = h('button', { class: 'btn btn-primary', type: 'button', onClick: () => { stopSpeech(); done += review ? 1 : 0; nextQuestion(); } }, review && done + 1 >= total ? 'Finish review' : 'Next question');
     box.append(h('div', { class: 'row' }, next, h('a', { class: 'btn btn-quiet', href: '#/map' }, 'See my map')));
     next.focus({ preventScroll: false });
+    if (voice) {   // voice mode: "say next" moves on
+      (async () => {
+        await spoke; if (!ctx.live()) return;
+        await speak('Say next for the next question.', getLang(), { force: true });
+        const said = (await listenOnce({ language: getLang(), timeoutMs: 8000 })).toLowerCase();
+        if (ctx.live() && /\b(next|agla|agli|aage|continue|haan|yes|ok|okay)\b/.test(said)) next.click();
+      })();
+    }
   }
 
-  function reasoning(a, box) {
+  function reasoning(a, box, spoke = Promise.resolve()) {
     const check = a.reasoning_kind === 'check';
     let usedVoice = false;
     const status = h('p', { class: 'muted small', role: 'status' });
@@ -141,6 +182,17 @@ export async function practice(root, ctx) {
       dictation.available() ? mic : h('p', { class: 'muted small' }, 'Voice input is not supported in this browser (try Chrome or Edge). You can type below.'),
       text, status, h('div', { class: 'row' }, sendBtn, h('button', { class: 'btn btn-quiet', type: 'button', onClick: () => { dictation.stop(); panel.remove(); finishRow(box); } }, 'Skip')));
     box.append(panel);
+    if (voice) {   // voice mode: read the prompt, listen for the explanation, send it
+      (async () => {
+        await spoke; if (!ctx.live()) return;
+        await speak(a.reasoning_prompt, getLang(), { force: true });
+        status.textContent = '🎙 Listening: explain your thinking…';
+        const said = await listenOnce({ language: getLang(), timeoutMs: 15000, onInterim: (t) => { text.value = t; } });
+        if (!ctx.live() || !panel.isConnected) return;
+        if (said) { text.value = said; usedVoice = true; sendBtn.disabled = false; sendReasoning(); }
+        else status.textContent = 'I did not hear anything. Tap the mic, or type.';
+      })();
+    }
 
     async function sendReasoning() {
       dictation.stop(); sendBtn.disabled = true;
