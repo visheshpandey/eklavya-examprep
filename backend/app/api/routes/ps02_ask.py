@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.api.routes import documents
 from app.errors import BadRequestError
-from app.ps02 import content, doubts, notes, service
+from app.ps02 import content, doubts, notes, question_gen, service
 
 router = APIRouter()
 
@@ -61,6 +61,7 @@ async def upload_notes(student_id: int | None = Form(None), class_section: str |
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     result = await documents.upload_document(file=file, text=text, user_id=owner)
+    question_gen.clear_prefetch(None if class_section else student_id)   # questions generated before these notes existed must not be served
     return notes.describe(result["document_id"], "class" if class_section else "mine")
 
 
@@ -68,4 +69,5 @@ async def upload_notes(student_id: int | None = Form(None), class_section: str |
 def delete_note(document_id: int, student_id: int | None = None, class_section: str | None = None):
     if not notes.delete_note(document_id, student_id, class_section):
         raise HTTPException(404, "Note not found")
+    question_gen.clear_prefetch(None if class_section else student_id)
     return {"deleted": document_id}

@@ -155,6 +155,15 @@ def prefetch(student_id: int, concept_id: str, difficulty: int, active_mcs: list
         _prefetch[student_id] = (key, _pool_executor.submit(generate, concept_id, difficulty, active_mcs, recent_stems, notes))
 
 
+def clear_prefetch(student_id: int | None = None) -> None:
+    """Forget pre-generated questions (all of them, or one student's). Called when notes change, so no stale question without a citation is served."""
+    with _lock:
+        if student_id is None:
+            _prefetch.clear()
+        else:
+            _prefetch.pop(student_id, None)
+
+
 def take_prefetched(student_id: int, concept_id: str, difficulty: int, wait_seconds: float = 12.0) -> dict | None:
     """The pre-generated question if it matches what is wanted now (waits briefly if still running), else None."""
     with _lock:
