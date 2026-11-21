@@ -221,6 +221,27 @@ def _trace_for(student_id: int, concept_id: str) -> dict:
     return rootcause.trace(concept_id, lm.get_mastery(student_id), service.active_misconceptions(student_id))
 
 
+_warm = {"at": 0.0}
+
+
+@router.post("/api/ps02/warm")
+def warm():
+    """Called once per browser session: wakes the model with a tiny request in the background (at most every 5 minutes) so the first real call is not the cold one."""
+    import threading
+    import time as _t
+    if _t.time() - _warm["at"] > 300:
+        _warm["at"] = _t.time()
+
+        def ping():
+            try:
+                from app.ai import gemini
+                gemini.llm_json("Reply with JSON only.", 'Return {"ok": true}', ("ok",), 0.0, 12000)
+            except Exception:  # noqa: BLE001 - a warm-up only
+                pass
+        threading.Thread(target=ping, daemon=True).start()
+    return {"ok": True}
+
+
 @router.get("/api/ps02/board")
 def board_view(student_id: int):
     """🎯 Predicted CBSE Physics score (an estimate, labelled approximate) and the fixes ranked by marks."""

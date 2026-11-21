@@ -113,7 +113,7 @@ export async function practice(root, ctx) {
     stage.replaceChildren(h('div', { class: 'card question' },
       h('div', { class: 'q-meta' },
         h('span', { class: `pill diff-${q.difficulty}` }, `${DIFF[q.difficulty]} · level ${q.difficulty}`), h('span', { class: 'chip' }, `${q.chapter} · ${q.concept_name}`),
-        q.source !== 'ai' && h('span', { class: 'chip', title: 'The AI was slow, so a prepared question was used' }, 'prepared question')),
+        q.source !== 'ai' && h('span', { class: 'chip', title: 'A ready-made question, so the demo is instant and reliable' }, 'demo question')),
       h('p', { class: 'why' }, h('b', null, 'Why this question? '), q.why),
       rc && h('p', { class: `root-chip ${rc.applied ? 'root-applied' : ''}` }, rc.applied ? '🎯 Root first: ' : '💡 Heads up: ',
         rc.applied ? `${rc.name} is what is holding things back (${rc.misconception?.label || 'weak basics'}), so we start there.` : `if this keeps going wrong, the root cause may be in ${rc.name}${rc.misconception ? ` (${rc.misconception.label})` : ''}. `,

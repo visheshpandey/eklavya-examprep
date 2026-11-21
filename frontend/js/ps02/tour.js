@@ -147,7 +147,7 @@ const onKey = (e) => {
   if (!state) return;
   if (e.key === 'Escape') end(false);
   else if (e.key === 'ArrowRight' && !state.ui.next.disabled) state.ui.next.click();
-  else if (e.key === 'ArrowLeft' && !state.ui.back.disabled) state.ui.back.click();
+  else if (e.key === 'ArrowLeft' && !state.ui.back.disabled && !state.ui.back.hidden) state.ui.back.click();
 };
 
 async function go(i) {
@@ -161,6 +161,8 @@ async function go(i) {
   ui.text.textContent = 'Setting this up…';
   ui.status.textContent = '';
   ui.back.disabled = i === 0; ui.next.disabled = true;
+  const stateful = new Set(['misconception', 'notebook', 'dialogue']);   // these steps change state (answer, snap, dialogue): going back into them would hang
+  ui.back.hidden = stateful.has(step.id) || (i > 0 && stateful.has(state.steps[i - 1].id));   // so there is no Back on them, nor on the step right after them
   ui.next.textContent = i === state.steps.length - 1 ? 'Finish' : 'Next';
   ui.spot.hidden = true;
   const ctrl = { status: (t) => { if (state && state.token === token) ui.status.textContent = t; } };

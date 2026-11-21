@@ -5,6 +5,7 @@ misconception ("why does the bulb use up current?") it is logged to student_misc
 """
 from __future__ import annotations
 
+import time
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
@@ -79,6 +80,15 @@ def tag(question: str, hint: str | None) -> dict:
 
 
 def _answer(student_id: int, user_id: int, question: str, language: str) -> dict:
+    try:
+        return _answer_once(user_id, question, language)
+    except Exception as exc:  # noqa: BLE001 - a busy model (503 / 429 / timeout): one more try after a second before the student sees an error
+        log.warning("Doubt failed, retrying once: %s", str(exc)[:160])
+        time.sleep(1.0)
+        return _answer_once(user_id, question, language)
+
+
+def _answer_once(user_id: int, question: str, language: str) -> dict:
     if not retrieval.has_notes(user_id):   # the original tutor insists on notes; a doubt without any is still answered, from general knowledge
         prompt = voice_tutor._general_prompt(language, question, voice_tutor._earlier(user_id))
         return voice_tutor._general(user_id, question, language, prompt, 0, 0, "No notes uploaded yet")

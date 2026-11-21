@@ -26,7 +26,21 @@ export class ApiError extends Error {
   constructor(message, status = 0) { super(message); this.status = status; }
 }
 
-export async function api(path, { method = 'GET', body, timeout = 45000 } = {}) {
+const AI_PATH = /\/api\/(ps02\/doubt|ps02\/notebook|ps02\/root-cause|practice\/(next|reasoning)|dialogue\/|teacher\/(lesson|reteach))/;
+const retryable = (err) => err.status === 429 || err.status === 502 || err.status === 503 || err.status === 504 || err.status === 0 || err.status === undefined;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** An AI call that failed because the model was busy or slow is tried once more after a second before the person sees an error. */
+export async function api(path, opts = {}) {
+  try { return await apiOnce(path, opts); }
+  catch (err) {
+    if (!AI_PATH.test(path) || !retryable(err)) throw err;
+    await wait(1000);
+    return apiOnce(path, opts);
+  }
+}
+
+async function apiOnce(path, { method = 'GET', body, timeout = 45000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
@@ -81,7 +95,17 @@ export async function apiUpload(path, formData, { timeout = 120000 } = {}) {
 }
 
 /** POST and read a newline-delimited JSON stream, calling onEvent for each event as it arrives. Throws ApiError on an {type:'error'} event. */
-export async function apiStream(path, body, onEvent, { timeout = 60000 } = {}) {
+export async function apiStream(path, body, onEvent, opts = {}) {
+  let started = false;
+  try { return await streamOnce(path, body, (ev) => { started = true; onEvent(ev); }, opts); }
+  catch (err) {
+    if (started || !retryable(err)) throw err;      // only when nothing arrived yet, so no event is ever shown twice
+    await wait(1000);
+    return streamOnce(path, body, onEvent, opts);
+  }
+}
+
+async function streamOnce(path, body, onEvent, { timeout = 60000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {

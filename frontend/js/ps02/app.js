@@ -107,4 +107,5 @@ warmUp(
   () => { banner.textContent = 'Waking up the server… the free host can take up to a minute on the first visit. You can keep browsing.'; banner.hidden = false; },
   () => { banner.hidden = true; },
 );
+try { if (!sessionStorage.getItem('ps02.warm')) { sessionStorage.setItem('ps02.warm', '1'); api('/api/ps02/warm', { method: 'POST', timeout: 20000 }).catch(() => {}); } } catch { /* ignore */ }
 render();

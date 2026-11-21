@@ -197,6 +197,7 @@ def tour_question(student_id: int, kind: str) -> dict:
         raise KeyError(kind)
     q = {k: v for k, v in base.items() if k != "wrong_index"} | {"source": "bank", "tour": True}
     plan = plan_next(student_id, False, q["concept_id"])      # the planner's own tool calls (instant, no model), so the "thinking" panel is real
+    q["difficulty"] = plan["difficulty"]                       # one difficulty value for the badge and for "Why this question?"
     plan = {**plan, "trace": plan["trace"] + [{"tool": "generate_question", "ms": 0, "summary": "Used a prepared question, with wrong options built from the misconceptions students really hold"}]}
     return {**public_question(_store_question(student_id, q), q, plan), "tour_wrong_index": base["wrong_index"]}
 
