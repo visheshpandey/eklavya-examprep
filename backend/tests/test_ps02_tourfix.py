@@ -60,3 +60,17 @@ def test_the_notebook_quote_is_the_students_own_line_not_the_analysis():
         assert r["notebook"]["source"] == "sample-prepared"                # a built-in page never waits on the vision model
     finally:
         reseed.delete_by_name(["NbQuote"])
+
+
+def test_the_tour_notebook_sample_is_read_ahead_and_returned_at_once_without_a_second_attempt():
+    sid = student("NbAhead")
+    try:
+        client.get("/api/practice/next", params={"student_id": sid, "tour": "notebook"})     # starts reading the sample page in the background
+        entry = notebook._PREPARED[(sid, "unit")]
+        assert entry["event"].wait(20)
+        before = db.one("SELECT COUNT(*) AS n FROM attempts WHERE student_id=?", (sid,))["n"]
+        r = notebook.analyse(sid, b"x", sample_id="unit")
+        assert r["readable"] and r["misconception"]["id"] == "MC22" and (sid, "unit") not in notebook._PREPARED
+        assert db.one("SELECT COUNT(*) AS n FROM attempts WHERE student_id=?", (sid,))["n"] == before      # the tap added nothing: the work was already done
+    finally:
+        reseed.delete_by_name(["NbAhead"])

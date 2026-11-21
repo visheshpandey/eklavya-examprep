@@ -9,6 +9,8 @@ from __future__ import annotations
 import io
 import json
 import logging
+import threading
+import time
 
 from pydantic import BaseModel, ValidationError, field_validator
 
@@ -150,8 +152,38 @@ def _notebook_block(r: Reading, source: str) -> dict:
 
 
 # ------------------------------------------------------------------ entry points
+_PREPARED: dict = {}      # (student_id, sample_id) -> {"event", "result", "at"}: a sample page analysed ahead of time (the Judge tour)
+
+
+def prepare_sample(student_id: int, sample_id: str, language: str = "hinglish") -> None:
+    """Analyse a built-in sample page in the background, so tapping it shows the result at once (every database statement is a network round trip on the hosted site)."""
+    key = (student_id, sample_id)
+    entry = {"event": threading.Event(), "result": None, "at": time.time()}
+    _PREPARED[key] = entry
+
+    def run():
+        try:
+            entry["result"] = _analyse(student_id, None, sample_id=sample_id, language=language)
+        except Exception:  # noqa: BLE001 - the tap then simply does the work itself
+            log.warning("Could not prepare the sample page", exc_info=True)
+        finally:
+            entry["event"].set()
+    threading.Thread(target=run, daemon=True).start()
+
+
 def analyse(student_id: int, image: bytes | None, *, attempt_id: int | None = None, sample_id: str | None = None, concept_id: str | None = None,
             language: str = "hinglish") -> dict:
+    if sample_id and attempt_id is None:
+        entry = _PREPARED.pop((student_id, sample_id), None)
+        if entry and time.time() - entry["at"] < 600:
+            entry["event"].wait(15)
+            if entry["result"] is not None:
+                return entry["result"]
+    return _analyse(student_id, image, attempt_id=attempt_id, sample_id=sample_id, concept_id=concept_id, language=language)
+
+
+def _analyse(student_id: int, image: bytes | None, *, attempt_id: int | None = None, sample_id: str | None = None, concept_id: str | None = None,
+             language: str = "hinglish") -> dict:
     """Read the photo. With an attempt (a practice answer) or a built-in sample, it is applied like spoken reasoning; otherwise (Ask) it is logged like a doubt."""
     smp = sample(sample_id) if sample_id else None
     if sample_id and not smp:
