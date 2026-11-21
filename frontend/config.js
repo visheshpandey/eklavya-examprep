@@ -4,7 +4,7 @@
 // For a one-off test you can also open the page with ?api=http://localhost:5099
 const local = ['localhost', '127.0.0.1', ''].includes(location.hostname);
 window.APP_CONFIG = {
-  apiBase: local ? 'http://localhost:5002' : 'https://REPLACE-ME-ps02-api.onrender.com',
+  apiBase: local ? 'http://localhost:5002' : 'https://eklavya-examprep-api.onrender.com',
   userId: 1,
   mentorModel: '',   // your MetaPerson/ARKit GLB (e.g. 'assets/avatar/mentor.glb'); empty = the compressed sample in assets/avatar
   avatarMode: 'static',   // 'auto' (photoreal, then 3d, then static) | 'photoreal' | '3d' | 'static'
