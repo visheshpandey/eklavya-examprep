@@ -139,7 +139,7 @@ def _diagnosis(r: Reading, attempt_correct: bool | None, language: str) -> dict:
     mc = "NONE" if (careless or not wrong) else r.misconception_id
     line = f"line {r.first_wrong_step + 1}: {r.transcribed_steps[r.first_wrong_step]}" if wrong else ""
     diag = misconception.Diagnosis(
-        misconception_id=mc, confidence=CONFIDENCE[r.confidence], evidence=(f"{line} ({r.error})" if wrong else "the written working is correct")[:240],
+        misconception_id=mc, confidence=CONFIDENCE[r.confidence], evidence=(line if wrong else "the written working is correct")[:240],
         is_careless_error=careless, reasoning_sound=not wrong, new_label=r.new_label, fix=r.error,
         feedback_hinglish=r.feedback_hinglish, feedback_english=r.feedback_english)
     return misconception._finish(diag, "notebook", language)
@@ -169,7 +169,7 @@ def analyse(student_id: int, image: bytes | None, *, attempt_id: int | None = No
         question, concept_id = json.loads(attempt["question_json"]), attempt["concept_id"]
 
     reading, source = None, "ai"
-    if image is not None:
+    if image is not None and not smp:      # a built-in sample page is shown from its prepared reading at once
         try:
             reading = read(image, "image/jpeg", question, concept_id, language, SAMPLE_DEADLINE_S if smp else READ_DEADLINE_S)
         except (ValidationError, ValueError, TypeError, gemini.LLMError) as exc:

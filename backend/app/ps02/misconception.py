@@ -142,6 +142,11 @@ def classify(question: dict, chosen_index: int, reasoning: str, concept_id: str,
     return _finish(diag, source, language)
 
 
+def instant(question: dict, chosen_index: int, reasoning: str, concept_id: str, prior: str | None = None, language: str = "hinglish") -> dict:
+    """The keyword reading, no model call: used by the Judge tour so every step shows at once."""
+    return _finish(heuristic(question, chosen_index, reasoning, concept_id, prior), "heuristic", language)
+
+
 def classify_events(question: dict, chosen_index: int, reasoning: str, concept_id: str, prior: str | None = None, language: str = "hinglish"):
     """Streaming version: yields ("quick", out) at once (a keyword-matcher first impression), then ("delta", text) as the model writes its feedback,
     then ("final", out). The final event is authoritative; if the model fails, it is the keyword-matcher result."""

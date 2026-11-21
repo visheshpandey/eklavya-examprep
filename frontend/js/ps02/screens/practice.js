@@ -22,6 +22,7 @@ export async function practice(root, ctx) {
   const review = ctx.query.review === '1';
   let firstConcept = ctx.query.concept || null;
   let done = 0, total = null;
+  let tourKind = ctx.query.tour || null;   // the Judge tour asks for a fixed, prepared question
   const targetMc = ctx.query.talk || null, rootConcept = ctx.query.talk ? ctx.query.concept || null : null;   // after "Fix the root first"
   let targetLeft = 0;   // the next 3 questions are aimed at that misconception
   const stage = h('div', { class: 'stage' });
@@ -69,7 +70,9 @@ export async function practice(root, ctx) {
       let aimed = 0;
       if (targetLeft > 0 && rootConcept) { params.concept_id = rootConcept; params.target_mc = targetMc; aimed = 4 - targetLeft; targetLeft -= 1; }
       else if (firstConcept) params.concept_id = firstConcept;
+      if (tourKind) { params.tour = tourKind; tourKind = null; }
       const q = await api(`/api/practice/next?${qs(params)}`);
+      if (q.tour_wrong_index !== undefined) stage.dataset.tourWrong = String(q.tour_wrong_index);
       q.aimed = aimed;
       firstConcept = null;
       if (ctx.live()) showQuestion(q);
@@ -284,14 +287,14 @@ export async function practice(root, ctx) {
           h('p', null, feedback), h('p', { class: 'muted small' }, 'We treated this as a small slip, so your mastery drops only a little.'));
       } else if (r.misconception) {
         card.replaceChildren(h('p', { class: 'eyebrow' }, `Misconception spotted · Confidence: ${d.confidence_label || (d.confidence >= 0.75 ? 'High' : d.confidence >= 0.5 ? 'Medium' : 'Low')}`), h('h2', null, r.misconception.label),
-          h('blockquote', { class: 'quote' }, h('small', null, 'You said'), `“${evidence}”`),
+          h('blockquote', { class: 'quote' }, h('small', null, said === '📸 notebook' ? 'From your notebook' : 'You said'), `“${evidence}”`),
           revealed ? [h('p', null, feedback), h('div', { class: 'fix' }, h('b', null, 'The fix: '), r.misconception.correction),
             r.misconception.analogy && h('p', { class: 'analogy' }, h('b', null, 'Think of it like this: '), r.misconception.analogy)]
             : h('p', { class: 'lede-small' }, 'Let’s talk it through. I will not just tell you the answer: work it out with me below.'));
       } else {
         card.replaceChildren(h('p', { class: 'eyebrow' }, r.lucky_guess ? 'Reasoning check' : 'A new pattern, not in our list yet'),
           h('h2', null, r.lucky_guess ? 'Right answer, shaky reasoning' : (d.new_label || 'Let’s tighten this up')),
-          d.evidence && h('blockquote', { class: 'quote' }, h('small', null, 'You said'), `“${d.evidence}”`), h('p', null, feedback),
+          d.evidence && h('blockquote', { class: 'quote' }, h('small', null, said === '📸 notebook' ? 'From your notebook' : 'You said'), `“${d.evidence}”`), h('p', null, feedback),
           d.fix && h('div', { class: 'fix' }, h('b', null, 'The fix: '), d.fix),
           r.lucky_guess && h('p', { class: 'muted small' }, 'Because the reasoning was unsure, this answer raised your mastery less than usual.'));
       }

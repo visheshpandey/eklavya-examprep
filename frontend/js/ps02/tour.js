@@ -19,20 +19,15 @@ async function typeInto(el, text, delay = 16) {
   el.focus(); el.value = '';
   for (const ch of text) { el.value += ch; el.dispatchEvent(new Event('input', { bubbles: true })); await sleep(delay); }
 }
-/** Answer practice questions until one is wrong (a normal student step, done for the viewer). */
+/** Pick the prepared wrong option of the tour's fixed question (a normal student step, done for the viewer). Never waits long: false means "skip this step". */
 async function answerWrong() {
-  await waitFor(() => $('.opt:not(:disabled)'), 60000);
-  for (let t = 0; t < 4; t++) {
-    const opts = document.querySelectorAll('.opt');
-    if (!opts[t]) return false;
-    opts[t].click(); await sleep(250);
-    byText('button', /^Check answer$/)?.click();
-    if (!await waitFor(() => $('.result'), 20000)) return false;
-    if ($('.result-bad')) return true;
-    byText('button', /Next question/)?.click();
-    if (!await waitFor(() => $('.opt:not(:disabled)'), 60000)) return false;
-  }
-  return false;
+  if (!await waitFor(() => $('.opt:not(:disabled)') && $('.stage')?.dataset.tourWrong !== undefined, 10000)) return false;
+  const pick = document.querySelectorAll('.opt')[Number($('.stage').dataset.tourWrong)];
+  if (!pick) return false;
+  pick.click(); await sleep(200);
+  byText('button', /^Check answer$/)?.click();
+  if (!await waitFor(() => $('.result'), 8000)) return false;
+  return Boolean($('.result-bad'));
 }
 
 /** Does this endpoint exist? A plain fetch, so a 404 here can never be mistaken for "the student is gone". */
@@ -48,9 +43,9 @@ const STEPS = [
     text: 'Generic AI tutors answer questions. Eklavya models what a student does and does not understand, finds the misconception behind a wrong answer, and talks them out of it, in Hindi, English or Hinglish. Watch the loop on the right, then let’s see it live.' },
   { id: 'map', title: 'Mastery map + root cause', route: '#/map', wait: '.root-card:not([hidden])', waitMs: 25000, target: () => $('.root-card') || $('.graph-card'),
     text: 'Aarav keeps getting Series circuits wrong. Eklavya traced it back through the prerequisite graph: he believes “current gets used up”, in Charge & current. The animated line on the map is that path. The fix starts at the root, not at the symptom.' },
-  { id: 'thinking', title: 'A visible agent', route: '#/practice?concept=C5', wait: '.opt', waitMs: 60000, target: () => $('.think') || $('.question'),
+  { id: 'thinking', title: 'A visible agent', route: '#/practice?tour=misconception', wait: '.opt', waitMs: 15000, target: () => $('.think') || $('.question'),
     text: 'This is “Eklavya’s thinking”: every question is the result of tool calls (check mastery, trace the root cause, set the difficulty, write the question with wrong options built from misconceptions). The AI writes words; the model decides what to ask.' },
-  { id: 'misconception', title: 'Named from his own words', route: '#/practice?concept=C5',
+  { id: 'misconception', title: 'Named from his own words', route: '#/practice?tour=misconception',
     async enter(s) {
       s.status('Answering wrong on purpose…');
       if (!await answerWrong()) return;
@@ -60,12 +55,12 @@ const STEPS = [
       await typeInto(ta, HINGLISH);
       byText('.reasoning button', /Send my explanation/)?.click();
       s.status('Eklavya is reading his words…');
-      await waitFor(() => $('.mc-card h2'), 45000);
+      await waitFor(() => $('.mc-card h2'), 12000);
     },
     target: () => $('.mc-card') || $('.reasoning'),
     text: () => ($('.mc-card h2') ? `From “${HINGLISH}” Eklavya named the idea: “${$('.mc-card h2').textContent}”. The wrong option alone could not tell us that. It is shown here with a confidence label, then a conversation starts instead of a correction.`
       : 'Eklavya reads the reasoning (voice or text, Hindi, English or Hinglish) and names the misconception behind the wrong answer.') },
-  { id: 'notebook', title: '📸 Snap your notebook', route: '#/practice?concept=C1',
+  { id: 'notebook', title: '📸 Snap your notebook', route: '#/practice?tour=notebook',
     async enter(s) {
       s.status('Answering wrong, then using a built-in sample page (no camera needed)…');
       if (!await answerWrong()) return;
@@ -75,18 +70,18 @@ const STEPS = [
       await waitFor(() => document.querySelectorAll('.snap-sample').length === 2, 10000);
       document.querySelectorAll('.snap-sample')[0]?.click();
       s.status('Reading the handwriting…');
-      await waitFor(() => $('.nb-view'), 60000);
+      await waitFor(() => $('.nb-view'), 12000);
     },
     target: () => $('.nb-view') || $('.reasoning'),
     text: 'A photo of handwritten working, read by AI. It transcribes every line and flags the FIRST wrong one: here line 3, because 200 mA was used as 200 instead of 0.2 A. This is a built-in sample page, so it works without a camera. On a phone the button opens the camera.' },
-  { id: 'dialogue', title: 'Talk it out, then it’s fixed', route: '#/practice?concept=C1',
+  { id: 'dialogue', title: 'Talk it out, then it’s fixed', route: '#/practice?tour=notebook',
     async enter(s) {
       const input = await waitFor(() => $('.dialogue input'), 25000);
       if (!input) return;
       s.status('Aarav explains it in his own words…');
       await typeInto(input, UNIT_EXPLANATION, 12);
       byText('.dialogue button', /^Send$/)?.click();
-      await waitFor(() => $('.dialogue .dlg-outro'), 50000);
+      await waitFor(() => $('.dialogue .dlg-outro'), 30000);
     },
     target: () => $('.dialogue'),
     text: () => ($('.dialogue .dlg-won') ? 'Eklavya never gave the answer: it asked guiding questions in Hinglish (and spoke them aloud), and the misconception counts as fixed only when Aarav explained the correct idea himself. His mastery jumped, capped so one conversation can’t over-credit.'

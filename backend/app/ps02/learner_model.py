@@ -62,6 +62,9 @@ def seed_from_diagnostic(results: dict[str, tuple[bool, int]]) -> dict[str, floa
     return {k: round(v, 4) for k, v in out.items()}
 
 
+MAX_ANSWER_CHANGE = 0.15
+
+
 def apply_answer(mastery: dict[str, float], concept_id: str, correct: bool, difficulty: int = 2,
                  misconception_id: str | None = None, careless: bool = False, lucky: bool = False) -> list[dict]:
     """Update ``mastery`` in place for one answer and return the list of changes (concept, before, after, reason).
@@ -74,6 +77,7 @@ def apply_answer(mastery: dict[str, float], concept_id: str, correct: bool, diff
 
     def change(cid: str, new: float, reason: str) -> None:
         before = mastery.get(cid, DEFAULT_P)
+        new = min(before + MAX_ANSWER_CHANGE, max(before - MAX_ANSWER_CHANGE, new))   # one answer never moves mastery by more than 15 points
         mastery[cid] = round(new, 4)
         deltas.append({"concept_id": cid, "name": graph[cid]["name"], "before": round(before, 4), "after": round(new, 4), "reason": reason})
 

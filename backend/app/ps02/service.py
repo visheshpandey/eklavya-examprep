@@ -180,6 +180,27 @@ def _load_question(question_id: str) -> dict | None:
     return json.loads(row["payload"]) if row else None
 
 
+TOUR_QUESTIONS = {
+    "misconception": {"concept_id": "C5", "difficulty": 2, "stem": "Two identical bulbs are connected one after the other (in series) to a battery. An ammeter between the battery and the first bulb reads 0.6 A. What does an identical ammeter read between the two bulbs?",
+                      "options": ["Less than 0.6 A, because the first bulb uses up some current", "0.6 A", "More than 0.6 A", "0 A, because the first bulb uses up all the current"], "correct_index": 1,
+                      "distractor_misconceptions": {"0": "MC01", "2": "MC_UNKNOWN", "3": "MC01"}, "explanation": "Charge is not used up, so the same current flows through every part of a series circuit: 0.6 A.", "wrong_index": 0},
+    "notebook": {"concept_id": "C1", "difficulty": 2, "stem": "A current of 200 mA flows through a wire for 10 s. How much charge flows through the wire?",
+                 "options": ["2000 C", "2 C", "210 C", "0.02 C"], "correct_index": 1, "distractor_misconceptions": {"0": "MC22", "2": "MC_UNKNOWN", "3": "MC_UNKNOWN"},
+                 "explanation": "200 mA = 0.2 A, so Q = I × t = 0.2 × 10 = 2 C.", "wrong_index": 0},
+}
+
+
+def tour_question(student_id: int, kind: str) -> dict:
+    """A fixed, pre-made question for the Judge tour, with the index of a wrong option, so the tour never depends on what the planner or the model picks."""
+    base = TOUR_QUESTIONS.get(kind)
+    if base is None:
+        raise KeyError(kind)
+    q = {k: v for k, v in base.items() if k != "wrong_index"} | {"source": "bank", "tour": True}
+    plan = plan_next(student_id, False, q["concept_id"])      # the planner's own tool calls (instant, no model), so the "thinking" panel is real
+    plan = {**plan, "trace": plan["trace"] + [{"tool": "generate_question", "ms": 0, "summary": "Used a prepared question, with wrong options built from the misconceptions students really hold"}]}
+    return {**public_question(_store_question(student_id, q), q, plan), "tour_wrong_index": base["wrong_index"]}
+
+
 def next_question(student_id: int, review: bool = False, concept_id: str | None = None, target_mc: str | None = None) -> dict:
     target_mc = target_mc if target_mc in content.misconceptions() and target_mc != "MC_UNKNOWN" else None
     plan = plan_next(student_id, review, concept_id)
@@ -275,6 +296,9 @@ def reasoning_events(student_id: int, attempt_id: int, reasoning: str, mode: str
     q = json.loads(att["question_json"])
     prior = None if att["correct"] else q.get("distractor_misconceptions", {}).get(str(att["chosen_index"]))
     diag = None
+    if q.get("tour"):                      # the Judge tour: a prepared question, read instantly with no model call
+        yield ("final", apply_reasoning(student_id, attempt_id, reasoning, mode, diag=misconception.instant(q, att["chosen_index"], reasoning, att["concept_id"], prior, language), language=language))
+        return
     for kind, value in misconception.classify_events(q, att["chosen_index"], reasoning, att["concept_id"], prior, language):
         if kind == "final":
             diag = value

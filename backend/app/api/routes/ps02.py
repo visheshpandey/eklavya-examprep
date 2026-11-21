@@ -114,8 +114,13 @@ def diagnostic_submit(body: DiagSubmit):
 
 
 @router.get("/api/practice/next")
-def practice_next(student_id: int, review: bool = False, concept_id: str | None = None, target_mc: str | None = None):
+def practice_next(student_id: int, review: bool = False, concept_id: str | None = None, target_mc: str | None = None, tour: str | None = None):
     _student(student_id)
+    if tour:
+        try:
+            return service.tour_question(student_id, tour)
+        except KeyError:
+            raise HTTPException(404, "Unknown tour question")
     return service.next_question(student_id, review=review, concept_id=concept_id, target_mc=target_mc)
 
 
