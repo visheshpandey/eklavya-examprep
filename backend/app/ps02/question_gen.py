@@ -60,7 +60,7 @@ class GeneratedQuestion(BaseModel):
 SYSTEM = """You write one multiple-choice physics question for CBSE Class 10 students (rationalised syllabus).
 Rules: CBSE Class 10 level; sensible numeric values and correct units; exactly one correct option; four distinct options;
 every wrong option must be deliberately built from one of the listed misconceptions (a student holding that misconception would pick it),
-otherwise map it to MC_UNKNOWN. Do not repeat the stems already used. Plain language, no markdown.
+otherwise map it to MC_UNKNOWN. Do not repeat the stems already used. Plain language, no markdown. Write plain text only: no LaTeX and no $ signs; write maths with Unicode symbols (Ω, ², ×, ₁, ÷).
 Return ONLY JSON: {"stem": str, "options": [4 strings], "correct_index": 0-3, "distractor_misconceptions": {"<wrong option index>": "<misconception id>"},
 "difficulty": 1-3, "concept_id": str, "explanation": str (1-2 sentences, why the right answer is right)}.
 Difficulty 1 = direct recall or one step; 2 = a short calculation or a comparison; 3 = multi-step or a tricky case."""

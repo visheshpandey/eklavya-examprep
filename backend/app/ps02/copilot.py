@@ -76,7 +76,7 @@ def groups(class_section: str | None = None) -> dict:
 
 # ------------------------------------------------------------------ mini-lesson
 LESSON_SYSTEM = """You help a CBSE Class 10 physics teacher run a 10-minute mini-lesson for a small group of students who share ONE misconception.
-Make it concrete and doable with simple classroom materials. Use ONLY the facts given about the misconception; never state anything physically wrong.
+Make it concrete and doable with simple classroom materials. Use ONLY the facts given about the misconception; never state anything physically wrong. Write plain text only: no LaTeX and no $ signs; write maths with Unicode symbols (Ω, ², ×, ₁, ÷). 
 Return ONLY JSON: {"title": str, "hook_demo": "a 2-3 minute demo or question that makes the wrong idea visibly fail", "analogy": "one clear everyday analogy",
 "check_questions": [{"q": str, "a": str}, {"q": str, "a": str}, {"q": str, "a": str}], "script_hinglish": "what the teacher can SAY, in friendly Hinglish (Roman script), about 120-160 words, step by step through the 10 minutes",
 "board_notes": [str, str, str]}"""

@@ -347,6 +347,9 @@ button.chip, a.chip-action { min-height: 36px; cursor: pointer; }
 
 
 /* ---- teacher co-pilot */
+.lesson ol.checks { list-style: none; padding-left: 0; display: grid; gap: var(--s-2); }
+.lesson ol.checks > li { list-style: none; }
+.lesson ol.checks summary { cursor: pointer; }
 .group-card { border: 1px solid var(--line); border-radius: var(--r-panel); padding: var(--s-4); display: grid; gap: var(--s-3); margin-top: var(--s-3); background: var(--paper); }
 .group-card h3 { margin: 0; }
 .group-clear { opacity: .85; border-style: dashed; }

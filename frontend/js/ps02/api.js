@@ -1,5 +1,27 @@
 // All backend calls. Fetches never go to a third party; the backend holds the keys.
 import { API_BASE } from '../lib/config.js';
+import { getStudent } from './state.js';
+import { deepMath } from './math-text.js';
+
+/** The message in an error body. This app's handler answers {"error": "...", "code": "..."}; plain FastAPI answers {"detail": "..."}. */
+export function errorText(body) {
+  const v = body?.error ?? body?.detail ?? body?.message ?? '';
+  return typeof v === 'string' ? v : '';
+}
+
+// 404s that are about something other than the student (so they must NOT wipe the saved student)
+const NOT_ABOUT_THE_STUDENT = /question|attempt|dialogue|note|concept|misconception|expired|document|assignment|lesson/i;
+
+/** A 404 from ANY endpoint that is about the stored student (it says "student", or the request carried the stored id and is not about something else)
+ *  means the saved student no longer exists on the server (database reset). Tell the app to start over. */
+export function maybeStudentGone(status, message, path, body) {
+  if (status !== 404) return false;
+  const stored = getStudent();
+  const carriesId = stored != null && (String(path).includes(`student_id=${stored.id}`) || (body && Number(body.student_id) === Number(stored.id)));
+  const gone = /student/i.test(message || '') || (carriesId && !NOT_ABOUT_THE_STUDENT.test(message || ''));
+  if (gone) globalThis.dispatchEvent?.(new CustomEvent('ps02:student-gone'));
+  return gone;
+}
 
 export class ApiError extends Error {
   constructor(message, status = 0) { super(message); this.status = status; }
@@ -16,11 +38,11 @@ export async function api(path, { method = 'GET', body, timeout = 45000 } = {}) 
     });
     if (!res.ok) {
       let detail = '';
-      try { const j = await res.json(); detail = j.detail || j.message || ''; } catch { /* not json */ }
-      if (res.status === 404 && /student not found/i.test(String(detail))) globalThis.dispatchEvent(new CustomEvent('ps02:student-gone'));   // a stale saved student: start over
-      throw new ApiError(typeof detail === 'string' && detail ? detail : `The server answered ${res.status}.`, res.status);
+      try { detail = errorText(await res.json()); } catch { /* not json */ }
+      maybeStudentGone(res.status, detail, path, body);
+      throw new ApiError(detail || `The server answered ${res.status}.`, res.status);
     }
-    return await res.json();
+    return deepMath(await res.json());   // AI text may contain LaTeX: show it as plain readable maths
   } catch (err) {
     if (err instanceof ApiError) throw err;
     if (err.name === 'AbortError') throw new ApiError('This is taking longer than usual. The free server may be waking up; please try again.');
@@ -46,8 +68,9 @@ export async function apiUpload(path, formData, { timeout = 120000 } = {}) {
     const res = await fetch(API_BASE + path, { method: 'POST', body: formData, signal: controller.signal });
     if (!res.ok) {
       let detail = '';
-      try { const j = await res.json(); detail = j.detail || j.error || j.message || ''; } catch { /* not json */ }
-      throw new ApiError(typeof detail === 'string' && detail ? detail : `The upload failed (${res.status}).`, res.status);
+      try { detail = errorText(await res.json()); } catch { /* not json */ }
+      maybeStudentGone(res.status, detail, path, { student_id: formData.get?.('student_id') });
+      throw new ApiError(detail || `The upload failed (${res.status}).`, res.status);
     }
     return await res.json();
   } catch (err) {
@@ -64,14 +87,14 @@ export async function apiStream(path, body, onEvent, { timeout = 60000 } = {}) {
     const res = await fetch(API_BASE + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
     if (!res.ok) {
       let detail = '';
-      try { const j = await res.json(); detail = j.detail || j.message || ''; } catch { /* not json */ }
-      if (res.status === 404 && /student not found/i.test(String(detail))) globalThis.dispatchEvent(new CustomEvent('ps02:student-gone'));
-      throw new ApiError(typeof detail === 'string' && detail ? detail : `The server answered ${res.status}.`, res.status);
+      try { detail = errorText(await res.json()); } catch { /* not json */ }
+      maybeStudentGone(res.status, detail, path, body);
+      throw new ApiError(detail || `The server answered ${res.status}.`, res.status);
     }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    const emit = (line) => { if (!line.trim()) return; const ev = JSON.parse(line); if (ev.type === 'error') throw new ApiError(ev.message || 'Something went wrong.'); onEvent(ev); };
+    const emit = (line) => { if (!line.trim()) return; const ev = deepMath(JSON.parse(line)); if (ev.type === 'error') throw new ApiError(ev.message || 'Something went wrong.'); onEvent(ev); };
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;

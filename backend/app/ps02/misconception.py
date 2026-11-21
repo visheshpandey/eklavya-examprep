@@ -21,6 +21,7 @@ Hinglish (possibly a speech transcript with errors). Decide which ONE known misc
 Rules: pick only from the candidate ids given (or MC_UNKNOWN if the reasoning is wrong but matches none).
 When you answer MC_UNKNOWN you must NOT be generic: put a specific 3-6 word label for THIS error in new_label (e.g. "Divided instead of multiplied"), quote the faulty step in evidence, and explain exactly that step in the feedback. Formula slips (a formula turned upside down, wrong rearrangement) and unit or prefix errors (mA vs A, cm vs m) are covered by candidates when listed: prefer them.
 fix = one sentence stating the correct idea for exactly this error.
+Write plain text only: no LaTeX and no $ signs; write maths with Unicode symbols (Ω, ², ×, ₁, ÷). 
 The 'prior' misconception comes from the option they picked and is only a hint: trust the reasoning text over it.
 If the reasoning is actually correct and the wrong pick was a slip (misread option, arithmetic or tapped wrong), set is_careless_error true and misconception_id "NONE".
 If the answer was correct, set reasoning_sound false only when the reasoning is wrong or shows a lucky guess.

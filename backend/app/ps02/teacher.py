@@ -63,7 +63,7 @@ def overview(class_section: str | None = None) -> dict:
 # ------------------------------------------------------------------ reteach plan
 SYSTEM = """You help a CBSE Class 10 physics teacher plan tomorrow's reteaching, from class-wide data.
 For each of the top gaps/misconceptions give: what to reteach, ONE concrete demo or analogy a teacher can do in class with simple materials, and 2 quick check questions
-(short, with the expected answer). Keep it practical and brief. Return ONLY JSON:
+(short, with the expected answer). Keep it practical and brief. Write plain text only: no LaTeX and no $ signs; write maths with Unicode symbols (Ω, ², ×, ₁, ÷). Return ONLY JSON:
 {"headline": str, "items": [{"topic": str, "why": str, "demo": str, "check_questions": [{"q": str, "a": str}]}]}"""
 
 
