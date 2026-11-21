@@ -10,7 +10,7 @@ from app.ps02 import content, question_gen, seed
 client = TestClient(create_app())
 
 
-def fake_question(system, prompt, required_keys=(), temperature=0.7, timeout_ms=None):
+def fake_question(system, prompt, required_keys=(), temperature=0.7, timeout_ms=None, model=None):
     if "diagnosing WHY" in system:   # misconception classifier
         return {"misconception_id": "MC01", "confidence": 0.9, "evidence": "bulb current kha jaata hai", "is_careless_error": False, "reasoning_sound": False,
                 "feedback_hinglish": "Current khatam nahi hota.", "feedback_english": "Current is not used up."}

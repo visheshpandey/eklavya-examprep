@@ -110,7 +110,7 @@ def record_answer(student_id: int, question: dict, chosen_index: int, *, phase: 
     correct = chosen_index == question["correct_index"]
     prior = None if correct else question.get("distractor_misconceptions", {}).get(str(chosen_index))
     mc = misconception_id if misconception_id not in (None, "NONE") else None
-    effective = mc or (prior if prior != "MC_UNKNOWN" else None)
+    effective = None if careless else (mc or (prior if prior != "MC_UNKNOWN" else None))   # a careless slip carries no misconception
 
     mastery = lm.get_mastery(student_id)
     deltas = lm.apply_answer(mastery, cid, correct, difficulty, misconception_id=None if correct else effective, careless=careless, lucky=lucky)

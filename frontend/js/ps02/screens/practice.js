@@ -3,30 +3,12 @@ import { api, qs } from '../api.js';
 import { h } from '../dom.js';
 import { createDictation } from '../../lib/dictation.js';
 import { getLang, getStudent, setLang } from '../state.js';
-import { countUp, errorCard, loading, pct, skeleton } from '../ui.js';
+import { errorCard, loading, skeleton } from '../ui.js';
+import { animateBars, deltaList } from './deltas.js';
+import { mountDialogue } from './dialogue.js';
 
 const LANGS = [['hinglish', 'Hinglish'], ['english', 'English'], ['hindi', 'हिन्दी']];
 const DIFF = { 1: 'Easier', 2: 'Medium', 3: 'Harder' };
-
-export function deltaList(deltas, { title = 'Your mastery just changed' } = {}) {
-  return h('div', { class: 'deltas', 'aria-live': 'polite' }, h('h3', null, title),
-    deltas.map((d) => {
-      const up = d.after > d.before, same = Math.abs(d.after - d.before) < 0.0005;
-      const num = h('span', { class: 'delta-num' }, pct(d.before));
-      const prereq = d.reason.startsWith('prerequisite');
-      setTimeout(() => countUp(num, d.before * 100, d.after * 100), 250);
-      return h('div', { class: `delta ${same ? '' : up ? 'delta-up' : 'delta-down'}` },
-        h('span', { class: 'delta-name' }, d.name, prereq && h('small', null, ' (prerequisite effect)'), d.reason === 'careless slip' && h('small', null, ' (treated as a slip)')),
-        h('span', { class: 'delta-vals' }, pct(d.before), ' → ', num, h('span', { class: 'arrow', 'aria-hidden': 'true' }, same ? '' : up ? ' ▲' : ' ▼')),
-        h('span', { class: 'delta-bar', 'aria-hidden': 'true' }, h('i', { style: { width: `${d.before * 100}%` }, ref: null }, null)));
-    }));
-}
-
-function animateBars(container, deltas) {
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    container.querySelectorAll('.delta-bar i').forEach((bar, i) => { bar.style.width = `${deltas[i].after * 100}%`; });
-  }));
-}
 
 export async function practice(root, ctx) {
   const student = getStudent();
@@ -167,17 +149,22 @@ export async function practice(root, ctx) {
       try {
         const r = await api('/api/practice/reasoning', { method: 'POST', body: { student_id: student.id, attempt_id: a.attempt_id, reasoning_text: text.value.trim(), reasoning_mode: usedVoice ? 'voice' : 'text' } });
         if (!ctx.live()) return;
-        panel.replaceChildren(misconceptionCard(r, text.value.trim()));
+        const talk = Boolean(r.misconception) && !r.diagnosis.is_careless_error;   // a known misconception: talk it through instead of just correcting
+        const card = misconceptionCard(r, text.value.trim(), talk);
+        panel.replaceChildren(card);
         const finalDeltas = deltaList(r.mastery_changes, { title: 'Your mastery, updated with your explanation' });
         panel.after(finalDeltas); animateBars(finalDeltas, r.mastery_changes);
-        finishRow(box);
+        if (!talk) { finishRow(box); return; }
+        const done = () => { card.reveal(); finishRow(box); };
+        finalDeltas.after(mountDialogue({ student, attemptId: a.attempt_id, onDone: done, onUnavailable: done }));
       } catch (err) { panel.replaceChildren(errorCard(err.message, () => { panel.remove(); reasoning(a, box); })); }
     }
   }
 
-  function misconceptionCard(r, said) {
+  function misconceptionCard(r, said, talk = false) {
     const d = r.diagnosis;
     const card = h('div', { class: 'mc-card' });
+    let revealed = !talk;   // while Eklavya is talking the student through it, the fix and the explanation stay hidden
     const paint = () => {
       const english = getLang() === 'english';
       const feedback = english ? d.feedback_english : d.feedback_hinglish || d.feedback_english;
@@ -188,9 +175,9 @@ export async function practice(root, ctx) {
       } else if (r.misconception) {
         card.replaceChildren(h('p', { class: 'eyebrow' }, `Misconception spotted · ${Math.round(d.confidence * 100)}% sure`), h('h2', null, r.misconception.label),
           h('blockquote', { class: 'quote' }, h('small', null, 'You said'), `“${evidence}”`),
-          h('p', null, feedback),
-          h('div', { class: 'fix' }, h('b', null, 'The fix: '), r.misconception.correction),
-          r.misconception.analogy && h('p', { class: 'analogy' }, h('b', null, 'Think of it like this: '), r.misconception.analogy));
+          revealed ? [h('p', null, feedback), h('div', { class: 'fix' }, h('b', null, 'The fix: '), r.misconception.correction),
+            r.misconception.analogy && h('p', { class: 'analogy' }, h('b', null, 'Think of it like this: '), r.misconception.analogy)]
+            : h('p', { class: 'lede-small' }, 'Let’s talk it through. I will not just tell you the answer: work it out with me below.'));
       } else {
         card.replaceChildren(h('p', { class: 'eyebrow' }, r.lucky_guess ? 'Reasoning check' : 'A new pattern, not in our list yet'),
           h('h2', null, r.lucky_guess ? 'Right answer, shaky reasoning' : (d.new_label || 'Let’s tighten this up')),
@@ -200,6 +187,7 @@ export async function practice(root, ctx) {
       }
     };
     card.addEventListener('lang', paint);
+    card.reveal = () => { revealed = true; paint(); };
     paint();
     return card;
   }

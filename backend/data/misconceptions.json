@@ -16,7 +16,9 @@
         "current khatam ho jata hai"
       ],
       "correction": "Current is the flow of charge and charge is not used up; the same current leaves a bulb as enters it. What the bulb uses is energy.",
-      "analogy": "Water pipe through a water-wheel: same amount of water flows out; the wheel only takes energy from it."
+      "analogy": "Water pipe through a water-wheel: same amount of water flows out; the wheel only takes energy from it.",
+      "probe_hinglish": "Agar bulb current kha leta, to wire ke dono end pe ammeter alag reading dete. Tumhare hisaab se bulb se pehle aur baad kya reading aayegi, aur kyun?",
+      "probe_english": "If the bulb used up current, an ammeter on each side of it would read differently. What would each one show, in your view, and why?"
     },
     {
       "id": "MC02",
@@ -31,7 +33,9 @@
         "battery se hamesha utna hi current aata hai"
       ],
       "correction": "A cell fixes the voltage, not the current. Current = V/R, so it changes when the resistance of the circuit changes.",
-      "analogy": "A water tank gives fixed pressure; the flow depends on how narrow the pipe is."
+      "analogy": "A water tank gives fixed pressure; the flow depends on how narrow the pipe is.",
+      "probe_hinglish": "Ek hi battery ko pehle 2 Ω aur phir 10 Ω ke resistor se jodo. Kya dono mein same current behega? Soch ke batao.",
+      "probe_english": "Connect the same battery first to a 2 Ω resistor and then to a 10 Ω resistor. Would the same current flow both times? Tell me what you think."
     },
     {
       "id": "MC03",
@@ -47,7 +51,9 @@
         "total resistance sum hoga"
       ],
       "correction": "Each new parallel branch gives current one more path, so the total resistance goes down and is always less than the smallest branch.",
-      "analogy": "Opening extra billing counters in a shop makes it easier, not harder, for the queue to move."
+      "analogy": "Opening extra billing counters in a shop makes it easier, not harder, for the queue to move.",
+      "probe_hinglish": "Ek dukaan mein billing counter par line lagi hai. Agar 2 counter aur khol do, line jaldi niptegi ya der se? Is ka parallel resistors se kya link hai?",
+      "probe_english": "In a shop with a long billing queue, what happens if two more counters open: does it clear faster or slower? How does that connect to resistors in parallel?"
     },
     {
       "id": "MC04",
@@ -63,7 +69,9 @@
         "voltage bulb ke through jaata hai"
       ],
       "correction": "Potential difference is measured across two points; charge flows, voltage does not. Voltage is the push, current is the flow.",
-      "analogy": "Height difference of a waterfall is not the water itself; it is what makes the water flow."
+      "analogy": "Height difference of a waterfall is not the water itself; it is what makes the water flow.",
+      "probe_hinglish": "Waterfall mein pani behta hai, par uski height ka difference kya behta hai? Voltage in dono mein se kis jaisa hai?",
+      "probe_english": "In a waterfall, the water flows, but does the height difference flow? Which of these is voltage like?"
     },
     {
       "id": "MC05",
@@ -79,7 +87,9 @@
         "thickness se kuch farak nahi padta"
       ],
       "correction": "R = ρl/A. Resistance increases with length and decreases with area; the material only sets ρ.",
-      "analogy": "A long narrow corridor is harder to walk through in a crowd than a short wide one, though the floor is the same."
+      "analogy": "A long narrow corridor is harder to walk through in a crowd than a short wide one, though the floor is the same.",
+      "probe_hinglish": "Do copper ke taar socho: ek chhota aur mota, doosra lamba aur patla. Kis mein se current nikalna mushkil hoga, aur kyun?",
+      "probe_english": "Picture two copper wires: one short and thick, one long and thin. Which one makes it harder for current to pass, and why?"
     },
     {
       "id": "MC06",
@@ -96,7 +106,9 @@
         "series mein bhi 100W zyada chamkega"
       ],
       "correction": "A bulb's rating is for its rated voltage. In series the same current flows, so the bulb with larger resistance (the lower-wattage one) glows brighter, since P = I²R.",
-      "analogy": "A strong runner in a relay still must carry the same baton at the same pace as the others."
+      "analogy": "A strong runner in a relay still must carry the same baton at the same pace as the others.",
+      "probe_hinglish": "Series mein dono bulb se same current guzarta hai. P = I²R se batao, kis bulb ka R zyada hoga aur kaun zyada chamkega?",
+      "probe_english": "In series the same current passes through both bulbs. Using P = I²R, which bulb has the larger R, and which will glow brighter?"
     },
     {
       "id": "MC07",
@@ -111,7 +123,9 @@
         "voltage badhane se resistance badh jaata hai"
       ],
       "correction": "For an ohmic conductor at constant temperature, V/I is constant, so resistance stays the same. Doubling V doubles I.",
-      "analogy": "A straight road keeps the same width however fast cars drive on it."
+      "analogy": "A straight road keeps the same width however fast cars drive on it.",
+      "probe_hinglish": "Agar voltage badhne se resistance badhta, to V/I har baar alag aata. Ohm ke experiment mein V aur I ka graph kaisa dikhta hai?",
+      "probe_english": "If resistance grew with voltage, V/I would change every time. What does the V against I graph look like in Ohm's experiment?"
     },
     {
       "id": "MC08",
@@ -127,7 +141,9 @@
         "peeche banne wali image real hoti hai"
       ],
       "correction": "A real image forms where rays actually meet and can be caught on a screen; a virtual image forms behind the mirror where rays only appear to meet. A concave mirror can form both.",
-      "analogy": "A real image is like a projector picture on a wall; a virtual image is like the 'person' you see behind a bathroom mirror."
+      "analogy": "A real image is like a projector picture on a wall; a virtual image is like the 'person' you see behind a bathroom mirror.",
+      "probe_hinglish": "Real image ko screen par pakad sakte hain. Kya plane mirror ki image ko screen par pakad paoge? Aur concave mirror ki?",
+      "probe_english": "A real image can be caught on a screen. Could you catch a plane mirror's image on a screen? And a concave mirror's?"
     },
     {
       "id": "MC09",
@@ -144,7 +160,9 @@
         "sign ki zaroorat nahi, bas values daal di"
       ],
       "correction": "Distances are measured from the pole in the direction of incident light as positive. For a concave mirror, f and u are negative; for a convex mirror, f is positive.",
-      "analogy": "Like a number line: left of zero and right of zero are opposite directions, so they need opposite signs."
+      "analogy": "Like a number line: left of zero and right of zero are opposite directions, so they need opposite signs.",
+      "probe_hinglish": "Mirror formula mein distance pole se naapte hain, aur incident light ki direction mein jo hai woh positive. Concave mirror ka focus kis taraf hota hai, to f ka sign kya hoga?",
+      "probe_english": "In the mirror formula, distances are measured from the pole and the direction of the incident light is positive. Which side of a concave mirror is its focus on, so what is the sign of f?"
     },
     {
       "id": "MC10",
@@ -160,7 +178,9 @@
         "glass mein speed badh jaati hai"
       ],
       "correction": "Light slows down in a denser medium since n = c/v; higher n means lower speed v.",
-      "analogy": "Running on a road versus wading through mud: the thicker the medium, the slower you go."
+      "analogy": "Running on a road versus wading through mud: the thicker the medium, the slower you go.",
+      "probe_hinglish": "n = c/v. Agar glass ka n 1.5 hai, to glass mein light ki speed c se zyada hogi ya kam? Calculate karke dekho.",
+      "probe_english": "n = c/v. If glass has n = 1.5, is light faster or slower in glass than in air? Work it out."
     },
     {
       "id": "MC11",
@@ -175,7 +195,9 @@
         "aadha lens dhakne se aadhi image gayab"
       ],
       "correction": "Every part of a lens forms the complete image; covering half only makes the image dimmer, not incomplete.",
-      "analogy": "Cutting a window pane in half does not remove half of the view; it only lets in less light."
+      "analogy": "Cutting a window pane in half does not remove half of the view; it only lets in less light.",
+      "probe_hinglish": "Lens ka har hissa object ki kirnon ko mod kar image banata hai. Agar aadha lens dhak diya, to bachi hui kirnein kya banayengi?",
+      "probe_english": "Every part of a lens bends rays from the object to form the image. If you cover half of it, what will the remaining rays form?"
     },
     {
       "id": "MC12",
@@ -190,7 +212,9 @@
         "focal length zyada hai to power zyada"
       ],
       "correction": "Power P = 1/f (f in metres). A short focal length bends light strongly, so it means high power.",
-      "analogy": "A sharp turn changes direction more strongly than a gentle curve."
+      "analogy": "A sharp turn changes direction more strongly than a gentle curve.",
+      "probe_hinglish": "P = 1/f. Agar f chhota ho to power ka kya hoga? Chhoti f wala lens kirnon ko zyada modta hai ya kam?",
+      "probe_english": "P = 1/f. If f is small, what happens to the power? Does a lens with a short f bend rays more or less?"
     },
     {
       "id": "MC13",
@@ -205,7 +229,9 @@
         "myopia mein convex lens use hota hai"
       ],
       "correction": "In myopia the image forms in front of the retina, so a concave (diverging) lens is used to push the image back onto it. Convex lenses correct hypermetropia.",
-      "analogy": "If the picture lands too early, you need to spread the rays a little first."
+      "analogy": "If the picture lands too early, you need to spread the rays a little first.",
+      "probe_hinglish": "Myopia mein image retina se pehle ban jati hai. Use peeche dhakelne ke liye kirnon ko failana padega ya jodna? Kaun sa lens failata hai?",
+      "probe_english": "In myopia the image forms before the retina. To push it back, must the rays be spread out or brought together? Which lens spreads them?"
     },
     {
       "id": "MC14",
@@ -220,7 +246,9 @@
         "glass colours ko paida karta hai"
       ],
       "correction": "White light already contains all colours; a prism only separates them because each colour bends by a different amount.",
-      "analogy": "A prism is like a sorting machine, not a paint box."
+      "analogy": "A prism is like a sorting machine, not a paint box.",
+      "probe_hinglish": "Agar prism rang add karta, to doosra prism lagane par kya hota? Newton ke experiment mein doosra prism kya karta hai?",
+      "probe_english": "If a prism added colours, what would a second prism do? In Newton's experiment, what did the second prism do?"
     },
     {
       "id": "MC15",
@@ -236,7 +264,9 @@
         "laal rang sabse zyada bikharta hai"
       ],
       "correction": "Air molecules scatter short wavelengths (blue) far more than long ones (red), so scattered blue light reaches us from all directions.",
-      "analogy": "Tiny ripples scatter small waves more than big ones."
+      "analogy": "Tiny ripples scatter small waves more than big ones.",
+      "probe_hinglish": "Aasman neela dikhta hai chahe ocean na ho. Hawa ke molecules chhoti wavelength (neela) ko zyada bikherte hain ya badi (laal) ko?",
+      "probe_english": "The sky looks blue even where there is no ocean. Do air molecules scatter short wavelengths (blue) or long ones (red) more?"
     },
     {
       "id": "MC16",
@@ -251,7 +281,9 @@
         "field lines ek dusre ko kaat sakti hain"
       ],
       "correction": "Two field lines would give two directions of the field at the crossing point, which is impossible, so field lines never intersect.",
-      "analogy": "Two road signs pointing in different directions at the same spot would leave the driver confused, so a single spot has only one direction."
+      "analogy": "Two road signs pointing in different directions at the same spot would leave the driver confused, so a single spot has only one direction.",
+      "probe_hinglish": "Agar do field lines kisi bindu par cross karti, to wahan compass ki needle kis taraf ghoomti? Ek hi bindu par do directions ho sakti hain kya?",
+      "probe_english": "If two field lines crossed at a point, which way would a compass needle point there? Can one point have two directions at once?"
     },
     {
       "id": "MC17",
@@ -267,7 +299,9 @@
         "taar mein se field nahi nikalti"
       ],
       "correction": "Oersted showed that a current-carrying wire produces a magnetic field around it, which is why a compass needle deflects near it.",
-      "analogy": "A moving crowd of charges makes a 'wind' of magnetism around the wire, just as a moving fan makes air movement."
+      "analogy": "A moving crowd of charges makes a 'wind' of magnetism around the wire, just as a moving fan makes air movement.",
+      "probe_hinglish": "Oersted ke experiment mein wire ke paas compass needle ghoomi thi, par wahan koi magnet nahi tha. Isse kya pata chalta hai?",
+      "probe_english": "In Oersted's experiment a compass needle turned near a wire with no magnet anywhere. What does that tell you?"
     },
     {
       "id": "MC18",
@@ -283,7 +317,9 @@
         "force B ke saath saath hota hai"
       ],
       "correction": "The force is perpendicular to both the current and the magnetic field. Use Fleming's left-hand rule: Force, Field, Current are mutually perpendicular.",
-      "analogy": "Like pushing a door sideways with your thumb even though the hinge line and your palm point elsewhere."
+      "analogy": "Like pushing a door sideways with your thumb even though the hinge line and your palm point elsewhere.",
+      "probe_hinglish": "Fleming ke left-hand rule mein force, field aur current ki directions ek dusre se kaisi hoti hain, parallel ya perpendicular?",
+      "probe_english": "In Fleming's left-hand rule, how are the directions of force, field and current related: parallel or perpendicular?"
     },
     {
       "id": "MC19",
@@ -299,7 +335,9 @@
         "fuse neutral mein lagta hai"
       ],
       "correction": "The earth wire carries current only if there is a fault, to protect us from shocks. A fuse is put in the live wire so the circuit breaks before the appliance gets damaged.",
-      "analogy": "Earth wire is the emergency exit that stays empty until a fire; the fuse is the main gate that closes at the entrance."
+      "analogy": "Earth wire is the emergency exit that stays empty until a fire; the fuse is the main gate that closes at the entrance.",
+      "probe_hinglish": "Earth wire normally current le jaati hai ya sirf fault ke time? Aur fuse ko live wire mein hi kyun lagate hain?",
+      "probe_english": "Does the earth wire normally carry current, or only during a fault? And why is the fuse put in the live wire?"
     },
     {
       "id": "MC20",
@@ -315,7 +353,9 @@
         "surface se angle liya"
       ],
       "correction": "Angles of incidence and reflection are always measured from the normal (the line perpendicular to the surface), not from the surface.",
-      "analogy": "Like measuring how far you swing from a straight-up pole, not from the ground."
+      "analogy": "Like measuring how far you swing from a straight-up pole, not from the ground.",
+      "probe_hinglish": "Angle of incidence kahan se naapte hain: mirror ki surface se ya normal se? Normal kise kehte hain?",
+      "probe_english": "Where is the angle of incidence measured from: the mirror surface or the normal? What is the normal?"
     },
     {
       "id": "MC21",
@@ -340,7 +380,9 @@
         "formula ulta laga diya"
       ],
       "correction": "Q = I × t: charge is current multiplied by time. Check the units: ampere × second = coulomb, while ampere ÷ second is not charge.",
-      "analogy": "Distance = speed × time. You would never divide speed by time to find how far you have travelled."
+      "analogy": "Distance = speed × time. You would never divide speed by time to find how far you have travelled.",
+      "probe_hinglish": "Charge = current × time ya current ÷ time? Units se check karo: ampere × second kya banega?",
+      "probe_english": "Is charge current × time or current ÷ time? Check with units: what does ampere × second give?"
     },
     {
       "id": "MC22",
@@ -364,7 +406,9 @@
         "milliamp"
       ],
       "correction": "Convert everything to SI units first: 1 mA = 0.001 A, 100 cm = 1 m, 1 min = 60 s. Then check that the unit of your answer matches the quantity you wanted.",
-      "analogy": "You cannot add 2 rupees and 50 paise as '52'; first turn both into the same unit."
+      "analogy": "You cannot add 2 rupees and 50 paise as '52'; first turn both into the same unit.",
+      "probe_hinglish": "Formula lagane se pehle sab units ek jaise hone chahiye. 500 mA ko ampere mein kya likhoge, aur yeh kyun zaroori hai?",
+      "probe_english": "Before using a formula all quantities must be in matching units. How would you write 500 mA in amperes, and why does it matter?"
     },
     {
       "id": "MC_UNKNOWN",
@@ -373,7 +417,9 @@
       "description": "Wrong answer that does not match a known misconception. The classifier must still give a short specific label and a targeted explanation.",
       "telltale_phrases": [],
       "correction": "Let's go back to the basic definition and work it through step by step.",
-      "analogy": ""
+      "analogy": "",
+      "probe_hinglish": "Chalo apne steps dobara dekhte hain: pehle tumne kya socha, aur us step ka kaaran kya tha?",
+      "probe_english": "Let's retrace your steps: what did you think first, and what was your reason for that step?"
     }
   ]
 }

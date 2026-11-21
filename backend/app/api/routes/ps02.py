@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.ps02 import learner_model as lm, seed, service, srs, teacher
+from app.ps02 import learner_model as lm, seed, service, socratic, srs, teacher
 
 router = APIRouter()
 
@@ -34,6 +34,20 @@ class ReasoningIn(BaseModel):
     attempt_id: int
     reasoning_text: str = Field(min_length=1, max_length=1500)
     reasoning_mode: str = Field(default="text", pattern="^(voice|text)$")
+
+
+class DialogueStart(BaseModel):
+    student_id: int
+    attempt_id: int
+    language: str = Field(default="hinglish", pattern="^(hinglish|english|hindi)$")
+
+
+class DialogueReply(BaseModel):
+    student_id: int
+    dialogue_id: int
+    text: str = Field(min_length=1, max_length=800)
+    mode: str = Field(default="text", pattern="^(voice|text)$")
+    language: str | None = Field(default=None, pattern="^(hinglish|english|hindi)$")
 
 
 class TimeTravelIn(BaseModel):
@@ -103,6 +117,26 @@ def practice_reasoning(body: ReasoningIn):
         return service.apply_reasoning(body.student_id, body.attempt_id, body.reasoning_text.strip(), body.reasoning_mode)
     except KeyError:
         raise HTTPException(404, "Attempt not found")
+
+
+@router.post("/api/dialogue/start")
+def dialogue_start(body: DialogueStart):
+    _student(body.student_id)
+    try:
+        return socratic.start(body.student_id, body.attempt_id, body.language)
+    except KeyError:
+        raise HTTPException(404, "Attempt not found")
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@router.post("/api/dialogue/reply")
+def dialogue_reply(body: DialogueReply):
+    _student(body.student_id)
+    try:
+        return socratic.reply(body.student_id, body.dialogue_id, body.text, body.mode, body.language)
+    except KeyError:
+        raise HTTPException(404, "Dialogue not found")
 
 
 @router.get("/api/mastery")

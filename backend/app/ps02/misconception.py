@@ -7,17 +7,14 @@ from __future__ import annotations
 
 import logging
 import re
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 from pydantic import BaseModel, ValidationError, field_validator
 
 from app.ai import gemini
-from app.ps02 import content
+from app.ps02 import content, llm
 
 log = logging.getLogger(__name__)
-CLASSIFY_TIMEOUT_MS = 10000   # Gemini rejects deadlines under 10 s; our own 8 s deadline below is what the student waits at most
 CLASSIFY_DEADLINE_S = 8.0
-_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ps02-classify")
 
 SYSTEM = """You are a physics teacher diagnosing WHY a CBSE Class 10 student gave an answer. The student explained their thinking in English, Hindi or
 Hinglish (possibly a speech transcript with errors). Decide which ONE known misconception, if any, their reasoning shows.
@@ -104,11 +101,7 @@ def classify(question: dict, chosen_index: int, reasoning: str, concept_id: str,
     allowed = {m["id"] for m in candidates(concept_id)} | {"MC_UNKNOWN", "NONE"}
     source, diag = "ai", None
     try:
-        job = _executor.submit(gemini.llm_json, SYSTEM, _prompt(question, chosen_index, reasoning, concept_id, prior), ("misconception_id",), 0.2, CLASSIFY_TIMEOUT_MS)
-        try:
-            raw = job.result(timeout=CLASSIFY_DEADLINE_S)   # past 8 s the student gets the keyword-matcher answer instead of waiting
-        except FutureTimeout:
-            raise gemini.LLMError("The classifier took longer than 8 seconds") from None
+        raw = llm.hedged_json(SYSTEM, _prompt(question, chosen_index, reasoning, concept_id, prior), ("misconception_id",), 0.2, deadline_s=CLASSIFY_DEADLINE_S)   # past 8 s: keyword-matcher answer
         diag = Diagnosis(**raw)
         if diag.misconception_id not in allowed:
             diag.misconception_id = "MC_UNKNOWN"

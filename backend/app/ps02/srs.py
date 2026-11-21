@@ -64,3 +64,15 @@ def due_reviews(student_id: int, now: datetime | None = None) -> list[dict]:
     graph = content.concepts()
     rows = db.query("SELECT * FROM reviews WHERE student_id=? ORDER BY due_at", (student_id,))
     return [{**r, "name": graph[r["concept_id"]]["name"], "due": r["due_at"] <= now_s} for r in rows]
+
+
+def schedule_early(student_id: int, concept_id: str, now: datetime | None = None) -> dict:
+    """An unresolved misconception brings its concept back soon: due in 30 minutes (30 seconds in time-travel mode), SM-2 state reset to a failed recall."""
+    now = now or datetime.now(timezone.utc)
+    row = db.one("SELECT easiness FROM reviews WHERE student_id=? AND concept_id=?", (student_id, concept_id))
+    easiness = max(1.3, (row["easiness"] if row else 2.5) - 0.2)
+    due = (now + (timedelta(seconds=30) if _time_travel else timedelta(minutes=30))).isoformat(timespec="seconds")
+    with db.get_conn() as c:
+        c.execute("DELETE FROM reviews WHERE student_id=? AND concept_id=?", (student_id, concept_id))
+        c.execute("INSERT INTO reviews (student_id, concept_id, easiness, interval_days, repetitions, due_at) VALUES (?,?,?,?,?,?)", (student_id, concept_id, round(easiness, 3), 1, 0, due))
+    return {"concept_id": concept_id, "due_at": due, "easiness": round(easiness, 3), "interval_days": 1, "repetitions": 0}

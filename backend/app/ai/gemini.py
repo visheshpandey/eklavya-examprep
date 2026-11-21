@@ -54,13 +54,14 @@ def guarded(system: str) -> str:
     return f"{system}\n\n{prompts.load('prompt_safety.md')}"
 
 
-def call_llm_json(system: str, prompt: str, required_keys=(), temperature: float = 0.7, timeout_ms: int | None = None) -> dict:
+def call_llm_json(system: str, prompt: str, required_keys=(), temperature: float = 0.7, timeout_ms: int | None = None, model: str | None = None) -> dict:
     """Call Gemini in JSON mode and validate the keys.
 
     Returns ``{"success": True, "data": {...}}`` or ``{"success": False, "error": "..."}``.
     ``timeout_ms`` overrides the default limit for one heavy call. Results are cached for ``CACHE_TTL_SECONDS``.
     """
-    cache_key = hashlib.sha256(f"{settings.gemini_model}|{system}|{prompt}|{temperature}".encode()).hexdigest()
+    model = model or settings.gemini_model
+    cache_key = hashlib.sha256(f"{model}|{system}|{prompt}|{temperature}".encode()).hexdigest()
     hit = _cache.get(cache_key)
     if hit and time.time() - hit[0] < CACHE_TTL_SECONDS:
         return hit[1]
@@ -70,7 +71,7 @@ def call_llm_json(system: str, prompt: str, required_keys=(), temperature: float
     for attempt in range(1, ATTEMPTS + 1):
         try:
             response = _get_client().models.generate_content(
-                model=settings.gemini_model,
+                model=model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=guarded(system),
@@ -115,9 +116,11 @@ def _failure(error: str, busy_message: str) -> str:
     return FAILED_MESSAGE
 
 
-def llm_json(system: str, prompt: str, required_keys=(), temperature: float = 0.7, timeout_ms: int | None = None) -> dict | list:
+def llm_json(system: str, prompt: str, required_keys=(), temperature: float = 0.7, timeout_ms: int | None = None, model: str | None = None) -> dict | list:
     """Like ``call_llm_json`` but returns the data or raises ``LLMError``. ``timeout_ms`` lengthens the limit for one call."""
     extra = {} if timeout_ms is None else {"timeout_ms": timeout_ms}   # keeps simple test doubles working
+    if model:
+        extra["model"] = model
     result = call_llm_json(system, prompt, required_keys, temperature, **extra)
     if not result["success"]:
         raise LLMError(_failure(result["error"], BUSY_MESSAGE))

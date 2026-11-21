@@ -12,10 +12,10 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pydantic import BaseModel, ValidationError, field_validator, model_validator
 
 from app.ai import gemini
-from app.ps02 import content
+from app.ps02 import content, llm
 
 log = logging.getLogger(__name__)
-GEN_TIMEOUT_MS = 15000
+GEN_DEADLINE_S = 12.0
 _pool_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="ps02-gen")
 _cache: dict[str, list[dict]] = {}            # concept_id -> recently generated, validated questions (fallback pool)
 _prefetch: dict[int, tuple[tuple[str, int], Future]] = {}   # student_id -> ((concept, difficulty), future)
@@ -96,8 +96,7 @@ def generate(concept_id: str, difficulty: int, active_mcs: list[str] | None = No
     prompt = _prompt(concept_id, difficulty, active_mcs, recent_stems)
     for attempt in (1, 2):
         try:
-            raw = gemini.llm_json(SYSTEM, prompt, required_keys=("stem", "options", "correct_index"), temperature=0.8 if attempt == 1 else 0.4,
-                                  timeout_ms=GEN_TIMEOUT_MS)
+            raw = llm.hedged_json(SYSTEM, prompt, ("stem", "options", "correct_index"), 0.8 if attempt == 1 else 0.4, deadline_s=GEN_DEADLINE_S, hedge_after_s=5.0)
             q = GeneratedQuestion(**raw)
             q.concept_id, q.difficulty = concept_id, max(1, min(3, int(q.difficulty or difficulty)))
             if q.stem.strip() in seen:

@@ -238,3 +238,42 @@ button.chip, a.chip-action { min-height: 36px; cursor: pointer; }
   .start-form .row { flex-wrap: wrap; }
   .stem { font-size: var(--text-lg); }
 }
+
+/* ---- Socratic dialogue ("Eklavya talks you out of it") */
+.chip-ok { background: var(--ok-soft); color: var(--ok-text); border-color: transparent; }
+.lede-small { color: var(--ink-2); }
+.dialogue { display: grid; gap: var(--s-3); border-color: var(--accent-fill); }
+.dialogue[data-progress="resolved"] { border-color: var(--ok-fill); }
+.dlg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s-3); flex-wrap: wrap; }
+.dlg-tools { display: flex; align-items: center; gap: var(--s-2); }
+.track { display: grid; gap: 6px; }
+.track-bar { position: relative; height: 8px; border-radius: 99px; background: var(--surface-3); }
+.track-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--terracotta), var(--ochre), var(--ok-fill)); transition: width .7s cubic-bezier(.2,.7,.2,1); }
+.track-marker { position: absolute; top: 50%; left: 0; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: var(--surface); border: 3px solid var(--accent-fill); transition: left .7s cubic-bezier(.2,.7,.2,1); }
+.dialogue[data-progress="resolved"] .track-marker { border-color: var(--ok-fill); background: var(--ok-fill); }
+.track-steps { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--ink-3); }
+.track-step.on { color: var(--ink); font-weight: 600; }
+.chat { display: grid; gap: var(--s-2); max-height: 340px; overflow-y: auto; padding: var(--s-2) 2px; scroll-behavior: smooth; }
+.bubble { display: flex; gap: var(--s-2); align-items: flex-start; max-width: 88%; animation: bubble-in .28s ease-out both; }
+.bubble p { padding: var(--s-2) var(--s-3); border-radius: 14px; line-height: 1.45; }
+.bubble-tutor p { background: var(--sage); border-top-left-radius: 4px; }
+.bubble-student { margin-left: auto; flex-direction: row-reverse; }
+.bubble-student p { background: var(--accent-fill); color: var(--on-accent); border-top-right-radius: 4px; }
+.avatar { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-fill); color: var(--on-accent); font-family: var(--font-serif); }
+.move { align-self: flex-end; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+@keyframes bubble-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.typing p { display: inline-flex; gap: 5px; align-items: center; min-height: 36px; }
+.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); animation: dot 1s infinite; }
+.typing i:nth-child(2) { animation-delay: .15s; } .typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes dot { 0%, 60%, 100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-5px); opacity: 1; } }
+.dlg-controls { display: grid; gap: var(--s-2); }
+.dlg-text { margin-top: 0; flex-wrap: nowrap; }
+.dlg-text .input { flex: 1; }
+.wave { display: none; align-items: center; gap: 3px; height: 22px; }
+.wave i { width: 3px; height: 6px; border-radius: 2px; background: var(--on-speak); animation: wave 0.9s ease-in-out infinite; }
+@keyframes wave { 50% { height: 22px; } }
+.mic[aria-pressed="true"] .wave { display: inline-flex; }
+.mic[aria-pressed="true"] .mic-dot { display: none; }
+.dlg-outro { display: grid; gap: var(--s-2); padding-top: var(--s-3); border-top: 1px solid var(--line); animation: bubble-in .4s ease-out both; }
+.dlg-won h3 { color: var(--ok-text); font-family: var(--font-serif); font-weight: 400; font-size: 1.6rem; }
+@media (max-width: 560px) { .bubble { max-width: 96%; } .dlg-text { flex-wrap: wrap; } }
