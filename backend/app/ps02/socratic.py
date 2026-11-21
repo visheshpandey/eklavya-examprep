@@ -36,6 +36,10 @@ Rules:
 - Judge the student's LAST reply against the correct idea: understanding "none" (still wrong or off-topic), "partial" (moving the right way but incomplete), or
   "resolved" (they explained the correct idea clearly in their own words; repeating your hint back, or a bare "yes/ok", is NOT resolved).
 - If the student's FIRST reply is already clearly correct and complete, mark it "resolved" straight away (confirm warmly, do not make them go through more questions).
+- If the student states the correct idea AND its reason (in any wording, including Hinglish, a calculation like "90-30=60", or a short sentence), mark it "resolved" IMMEDIATELY.
+  NEVER ask the student again for something they have already said, and never ask "why" about a step that is correct. A correct reply that is merely short is still resolved.
+- From student turn 3 onwards, lean towards "resolved" whenever the core of the correct idea is present, even if the wording is rough.
+- A reply that still states the wrong idea (for example "the bulb uses up the current") is NEVER resolved.
 - still_holds_misconception is true while they still believe the wrong idea. Be kind; never say "wrong" harshly.
 Return ONLY JSON with the keys in EXACTLY this order (what you say is shown as you write it, so understanding comes first, then say):
 {"understanding": "none|partial|resolved", "say": str, "still_holds_misconception": bool, "next_move": "hint|question|counterexample|confirm"}"""
