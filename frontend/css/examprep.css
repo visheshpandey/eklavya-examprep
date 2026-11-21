@@ -344,3 +344,26 @@ button.chip, a.chip-action { min-height: 36px; cursor: pointer; }
 @keyframes rootpulse { 50% { stroke-width: 6.5; } }
 .stream-text { min-height: 1.4em; color: var(--ink-2); }
 @media (max-width: 640px) { #app { padding-bottom: 96px; } }
+
+
+/* ---- teacher co-pilot */
+.group-card { border: 1px solid var(--line); border-radius: var(--r-panel); padding: var(--s-4); display: grid; gap: var(--s-3); margin-top: var(--s-3); background: var(--paper); }
+.group-card h3 { margin: 0; }
+.group-clear { opacity: .85; border-style: dashed; }
+.groups { display: grid; }
+.lesson { border-top: 1px solid var(--line); padding-top: var(--s-3); display: grid; gap: var(--s-3); animation: bubble-in .3s ease-out both; }
+.lesson h4 { font-family: var(--font-serif); font-weight: 400; font-size: 1.5rem; margin: 0; }
+.lesson h5 { margin: 0 0 var(--s-1); font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: .06em; text-transform: uppercase; color: var(--accent-text); }
+.lesson-grid { display: grid; gap: var(--s-4); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.lesson details summary { cursor: pointer; padding: 2px 0; }
+.script { background: var(--surface-2); border-radius: var(--r-control); padding: var(--s-3) var(--s-4); display: grid; gap: var(--s-1); }
+.script p { white-space: pre-wrap; }
+.assign-state { display: grid; gap: var(--s-2); }
+.before-after { display: flex; align-items: center; gap: var(--s-3); }
+.ba { display: grid; justify-items: center; min-width: 110px; padding: var(--s-2) var(--s-4); border-radius: var(--r-control); }
+.ba b { font-family: var(--font-serif); font-weight: 400; font-size: 2.2rem; line-height: 1; }
+.ba small { font-size: var(--text-xs); }
+.ba.before { background: var(--bad-soft); color: var(--bad-text); } .ba.after { background: var(--warn-soft); color: var(--warn-text); } .ba.after.cleared { background: var(--ok-soft); color: var(--ok-text); }
+.ba-arrow { font-size: 1.6rem; color: var(--ink-3); }
+.assign-banner { border-color: var(--brand); background: var(--warn-soft); display: grid; gap: var(--s-2); justify-items: start; margin-bottom: var(--s-4); }
+.assign-banner h2 { margin: 0; }

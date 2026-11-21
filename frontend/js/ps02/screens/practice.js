@@ -6,6 +6,7 @@ import { getLang, getStudent, setLang } from '../state.js';
 import { errorCard, loading, skeleton } from '../ui.js';
 import { deltaList } from './deltas.js';
 import { thinkingPanel } from '../thinking-panel.js';
+import { assignmentBanner } from './assignment-banner.js';
 import { mountDialogue } from './dialogue.js';
 import { speak, stop as stopSpeech } from '../tts.js';
 import { matchSpokenOption, questionToSpeech } from '../spoken-answer.js';
@@ -47,8 +48,10 @@ export async function practice(root, ctx) {
     } }, voice ? '🎙 Voice mode: on' : '🎙 Voice mode: off');
   globalThis.addEventListener('hashchange', stopSpeech, { once: true });   // leaving the screen silences it
 
+  const assignSlot = h('div');
   root.replaceChildren(h('section', { class: 'narrow' },
-    h('div', { class: 'row between wrap' }, h('div', null, h('p', { class: 'eyebrow' }, review ? 'Spaced-repetition review' : 'Adaptive practice'), counter), h('div', { class: 'row tight' }, voiceBtn, langBar)), stage));
+    h('div', { class: 'row between wrap' }, h('div', null, h('p', { class: 'eyebrow' }, review ? 'Spaced-repetition review' : 'Adaptive practice'), counter), h('div', { class: 'row tight' }, voiceBtn, langBar)), assignSlot, stage));
+  if (!ctx.query.talk) assignmentBanner(student, { compact: true }).then((b) => { if (b && ctx.live()) assignSlot.replaceChildren(b); });
 
   async function nextQuestion() {
     if (review && done >= total) return summary();
@@ -267,8 +270,10 @@ export async function practice(root, ctx) {
   // "Fix the root first" from the map: a short conversation about the root misconception, then practice on that concept
   function rootFirst(conceptId, misconceptionId) {
     const concept = misconceptionId && conceptId;
-    const intro = h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Fix the root first'), h('h2', null, 'Let’s talk about the real cause'),
-      h('p', null, 'Before more practice, let’s clear the idea underneath. Explain it in your own words.'));
+    const assigned = Boolean(ctx.query.assignment);
+    const intro = h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, assigned ? '📌 Your teacher assigned this' : 'Fix the root first'),
+      h('h2', null, assigned ? 'A short conversation, then practice' : 'Let’s talk about the real cause'),
+      h('p', null, assigned ? 'Your teacher noticed a few students share this idea. Talk it through with Eklavya in your own words, then practise.' : 'Before more practice, let’s clear the idea underneath. Explain it in your own words.'));
     const go = h('button', { class: 'btn btn-primary', type: 'button', hidden: true, onClick: () => nextQuestion() }, 'Now practise this concept');
     const dlg = mountDialogue({ student, misconceptionId, conceptId: concept, onDone: () => { go.hidden = false; go.focus(); }, onUnavailable: () => nextQuestion() });
     stage.replaceChildren(intro, dlg, h('div', { class: 'row' }, go, h('button', { class: 'btn btn-quiet', type: 'button', onClick: () => nextQuestion() }, 'Skip to practice')));

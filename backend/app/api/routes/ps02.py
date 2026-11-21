@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.ps02 import content, learner_model as lm, rootcause, seed, service, socratic, srs, teacher
+from app.ps02 import content, copilot, learner_model as lm, rootcause, seed, service, socratic, srs, teacher
 
 router = APIRouter()
 
@@ -67,6 +67,12 @@ class DialogueReply(BaseModel):
     text: str = Field(min_length=1, max_length=800)
     mode: str = Field(default="text", pattern="^(voice|text)$")
     language: str | None = Field(default=None, pattern="^(hinglish|english|hindi)$")
+
+
+class AssignIn(BaseModel):
+    class_section: str | None = None
+    misconception_id: str
+    student_ids: list[int] | None = None
 
 
 class TimeTravelIn(BaseModel):
@@ -226,6 +232,35 @@ def teacher_overview(class_section: str | None = None):
 @router.get("/api/teacher/reteach")
 def teacher_reteach(class_section: str | None = None, refresh: bool = False):
     return teacher.reteach(class_section, force=refresh)
+
+
+@router.get("/api/teacher/groups")
+def teacher_groups(class_section: str | None = None):
+    """Students grouped by a shared active misconception, with any assignment's before -> after."""
+    return copilot.groups(class_section)
+
+
+@router.get("/api/teacher/lesson")
+def teacher_lesson(misconception_id: str, class_section: str | None = None, refresh: bool = False):
+    """A 10-minute mini-lesson for the group (hook demo, analogy, 3 check questions, Hinglish script). Cached per class and misconception."""
+    try:
+        return copilot.lesson(class_section, misconception_id, refresh)
+    except KeyError:
+        raise HTTPException(404, "Unknown misconception")
+
+
+@router.post("/api/teacher/assign")
+def teacher_assign(body: AssignIn):
+    try:
+        return copilot.assign(body.class_section, body.misconception_id, body.student_ids)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@router.get("/api/ps02/assignments")
+def student_assignments(student_id: int):
+    _student(student_id)
+    return {"assignments": copilot.student_assignments(student_id)}
 
 
 @router.post("/api/demo/seed-class")

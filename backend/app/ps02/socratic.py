@@ -15,7 +15,7 @@ from pydantic import BaseModel, ValidationError, field_validator
 
 from app import db
 from app.ai import gemini
-from app.ps02 import content, learner_model as lm, llm, llm_stream, srs
+from app.ps02 import content, copilot, learner_model as lm, llm, llm_stream, srs
 
 log = logging.getLogger(__name__)
 MAX_TURNS = 4
@@ -210,6 +210,7 @@ def _finish(student_id: int, row: dict, mc: dict, transcript: list, turn: int, l
         transcript.append({"role": "tutor", "text": say, "move": "confirm"})
         _save(row["id"], transcript, "resolved", turn)
         extra["mastery_changes"] = _resolve(student_id, row)
+        copilot.on_dialogue_end(student_id, row["misconception_id"], "resolved")
         extra["reveal"] = {"correction": mc["correction"], "analogy": mc["analogy"]}
         return _public(_load(row["id"], student_id), say=say, extra=extra)
 
@@ -218,6 +219,7 @@ def _finish(student_id: int, row: dict, mc: dict, transcript: list, turn: int, l
         say = ("Let's stop here. Here is the idea: " if language == "english" else "Chalo yahin rukte hain. Idea yeh hai: ") + closing["explanation"]
         transcript.append({"role": "tutor", "text": say, "move": "confirm"})
         _save(row["id"], transcript, "unresolved", turn)
+        copilot.on_dialogue_end(student_id, row["misconception_id"], "unresolved")
         extra["reveal"] = {"correction": closing["explanation"], "analogy": closing["analogy"]}
         extra["review"] = closing["review"]
         return _public(_load(row["id"], student_id), say=say, extra=extra)

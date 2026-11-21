@@ -10,7 +10,7 @@ import argparse
 
 from app import db
 
-LEARNER_TABLES = ("mastery", "attempts", "reviews", "student_misconceptions", "dialogues")
+LEARNER_TABLES = ("mastery", "attempts", "reviews", "student_misconceptions", "dialogues", "assignment_students")
 
 
 def delete_students(ids: list[int]) -> int:
@@ -19,6 +19,7 @@ def delete_students(ids: list[int]) -> int:
             db.execute(f"DELETE FROM {table} WHERE student_id=?", (sid,))
         db.execute("DELETE FROM students WHERE id=?", (sid,))
     db.execute("DELETE FROM ps02_cache WHERE cache_key LIKE 'reteach:%' OR cache_key LIKE 'lesson:%' OR cache_key LIKE 'q:%'")
+    db.execute("DELETE FROM assignments WHERE id NOT IN (SELECT assignment_id FROM assignment_students)")
     return len(ids)
 
 

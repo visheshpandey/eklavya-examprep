@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS dialogues (
     id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER, attempt_id INTEGER, concept_id TEXT, misconception_id TEXT, language TEXT,
     status TEXT DEFAULT 'open', student_turns INTEGER DEFAULT 0, transcript TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT
 );
+CREATE TABLE IF NOT EXISTS assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, class_section TEXT, misconception_id TEXT, concept_id TEXT, created_at TEXT
+);
+CREATE TABLE IF NOT EXISTS assignment_students (
+    assignment_id INTEGER, student_id INTEGER, status TEXT DEFAULT 'pending', outcome TEXT, done_at TEXT, PRIMARY KEY (assignment_id, student_id)
+);
 CREATE TABLE IF NOT EXISTS ps02_cache (
     cache_key TEXT PRIMARY KEY, payload TEXT, created_at REAL
 );

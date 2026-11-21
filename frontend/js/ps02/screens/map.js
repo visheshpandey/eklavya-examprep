@@ -4,6 +4,7 @@ import { api, qs } from '../api.js';
 import { h, s } from '../dom.js';
 import { getLang, getStudent } from '../state.js';
 import { countUp, level, loading, masteryColors, pct, sparkline } from '../ui.js';
+import { assignmentBanner } from './assignment-banner.js';
 
 const CHAPTERS = ['Light', 'Human Eye', 'Electricity', 'Magnetism'];
 const NODE_W = 112, NODE_H = 58, SLOT = 128, CHAPTER_GAP = 30, ROW_H = 92, PAD = 14;
@@ -134,6 +135,8 @@ export async function mapScreen(root, ctx) {
 
   // ---------- root cause: when the student keeps failing a concept, trace back to the real cause and draw the path on the map
   const rcBox = h('section', { class: 'card root-card', hidden: true, 'aria-live': 'polite' });
+  const assignBox = h('div');
+  if (!teacherView) assignmentBanner({ id: studentId }).then((b) => { if (b && ctx.live()) assignBox.replaceChildren(b); });
   function showPath(t) {
     nodeEls.forEach((g) => g.classList.remove('on-path', 'root-cause', 'struggling'));
     edgeEls.forEach(({ path }) => path.classList.remove('edge-root'));
@@ -180,6 +183,7 @@ export async function mapScreen(root, ctx) {
       h('div', { class: 'chips' }, weakest.map((n) => h('a', { class: 'chip chip-action', href: `#/practice?concept=${n.id}` }, `${n.short} · ${pct(n.p_known)}`))),
       h('div', { class: 'row' }, h('a', { class: 'btn btn-primary', href: '#/practice' }, 'Start practising'),
         dueCount > 0 && h('a', { class: 'btn', href: '#/reviews' }, `${dueCount} review${dueCount > 1 ? 's' : ''} due`))),
+    assignBox,
     rcBox,
     h('div', { class: 'map-grid' }, h('div', { class: 'card graph-card' }, svg, list), panel));
   if (reveal) history.replaceState(null, '', '#/map');
