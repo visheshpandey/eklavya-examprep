@@ -23,7 +23,7 @@ The 'prior' misconception comes from the option they picked and is only a hint: 
 If the reasoning is actually correct and the wrong pick was a slip (misread option, arithmetic or tapped wrong), set is_careless_error true and misconception_id "NONE".
 If the answer was correct, set reasoning_sound false only when the reasoning is wrong or shows a lucky guess.
 evidence = a short quote or paraphrase of what the student said. confidence is 0 to 1.
-feedback_hinglish: friendly Hinglish (Roman script), 2-3 short sentences: name the idea they mixed up, why it is wrong, and ONE intuitive analogy.
+feedback_hinglish: friendly Hinglish (Roman script), 2-3 short sentences: name the idea they mixed up, why it is wrong, and ONE intuitive analogy. Use the analogy given for the chosen misconception (put it in your own simple words); never invent a new analogy, and never say anything physically wrong.
 feedback_english: the same in simple English. Never be harsh.
 Return ONLY JSON: {"misconception_id": str, "confidence": number, "evidence": str, "is_careless_error": bool, "reasoning_sound": bool,
 "new_label": str, "feedback_hinglish": str, "feedback_english": str}"""
@@ -54,7 +54,7 @@ def candidates(concept_id: str) -> list[dict]:
 
 def _prompt(question: dict, chosen_index: int, reasoning: str, concept_id: str, prior: str | None) -> str:
     opts = "\n".join(f"  {i}. {o}" for i, o in enumerate(question["options"]))
-    cand = "\n".join(f'- {m["id"]} ({m["label"]}): {m["description"]}; e.g. {"; ".join(m["telltale_phrases"][:3])}' for m in candidates(concept_id))
+    cand = "\n".join(f'- {m["id"]} ({m["label"]}): {m["description"]}; e.g. {"; ".join(m["telltale_phrases"][:3])}. Correct idea: {m["correction"]} Analogy: {m["analogy"]}' for m in candidates(concept_id))
     correct = question["correct_index"]
     return (f"Question: {question['stem']}\nOptions:\n{opts}\nCorrect: {correct}. {question['options'][correct]}\n"
             f"Student chose: {chosen_index}. {question['options'][chosen_index]} ({'correct' if chosen_index == correct else 'wrong'})\n"

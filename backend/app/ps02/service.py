@@ -144,7 +144,7 @@ def plan_next(student_id: int, review: bool = False, concept_id: str | None = No
     """Decide WHAT to ask next (deterministic): concept, difficulty and the explanation shown to the student."""
     mastery = lm.get_mastery(student_id)
     if concept_id and concept_id in mastery:
-        cid, reason = concept_id, "You picked this concept."
+        cid, reason = concept_id, "You picked this concept. "
     else:
         cid, reason = None, ""
         if review:

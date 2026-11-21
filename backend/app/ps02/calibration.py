@@ -24,9 +24,10 @@ def recent_attempts(student_id: int, limit: int = 12) -> list[dict]:
 
 def why(concept_id: str, p: float, base: int, final: int) -> str:
     graph = content.concepts()
-    deps = [graph[d]["name"] for d in content.dependents(concept_id)]
+    short = lambda cid: graph[cid].get("short") or graph[cid]["name"]
+    deps = [short(d) for d in content.dependents(concept_id)]
     link = f" (prerequisite for {deps[0]})" if deps else ""
-    text = f"You're at {round(p * 100)}% on {graph[concept_id]['name']}{link} → difficulty {final}."
+    text = f"You're at {round(p * 100)}% on {short(concept_id)}{link} → difficulty {final}."
     if final > base:
         text += " You got the last 3 right, so we're stepping up."
     elif final < base:
