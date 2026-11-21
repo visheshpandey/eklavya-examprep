@@ -110,7 +110,7 @@ export async function startTour() {
   if (state) return;
   let student;
   let tourToken = null;
-  try { ({ student, token: tourToken } = await api('/api/demo/tour-reset', { method: 'POST', timeout: 30000 })); }
+  try { ({ student, token: tourToken } = await api('/api/demo/tour-reset', { method: 'POST', timeout: 100000 })); }
   catch (err) { toast(err.message || 'Could not prepare the demo. Please try again.'); return; }
   if (tourToken) setSession({ token: tourToken, role: 'teacher' });   // the tour shows both sides, so it runs with the demo teacher's pass
   setStudent({ id: student.id, name: student.name, demo: true });
