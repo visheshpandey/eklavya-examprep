@@ -4,6 +4,7 @@ import { h } from '../dom.js';
 import { errorCard, masteryColors, pct, skeleton, toast } from '../ui.js';
 import { noteList, notesUploader } from './notes.js';
 import { groupsSection } from './groups.js';
+import { classMarksCard } from './marks.js';
 
 const CHAPTERS = ['Light', 'Human Eye', 'Electricity', 'Magnetism'];
 
@@ -81,6 +82,7 @@ export async function teacher(root, ctx) {
   root.replaceChildren(
     h('p', { class: 'eyebrow' }, `Teacher dashboard · Class ${ov.class_section}`), h('h1', { class: 'page-title' }, 'Where the whole class is stuck'),
     h('div', { class: 'stats' }, stat(ov.student_count, 'students'), stat(pct(classAvg), 'class mastery'), stat(ov.gaps.filter((g) => g.average < 0.5).length, 'concepts below 50%'), stat(holders.size, 'students with misconceptions')),
+    ov.board && classMarksCard(ov.board),
     reteachBox,
     groupsSection(ctx),
     doubtsCard,

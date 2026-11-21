@@ -7,7 +7,7 @@ import time
 
 from app import db
 from app.ai import gemini
-from app.ps02 import content, learner_model as lm
+from app.ps02 import board, content, learner_model as lm
 
 log = logging.getLogger(__name__)
 RETEACH_TTL = 3600
@@ -57,7 +57,7 @@ def overview(class_section: str | None = None) -> dict:
               "recent": [{"student": r["student"], "question": r["question"], "concept_name": graph[r["concept_id"]]["name"] if r["concept_id"] else None,
                           "misconception": mcs_all[r["misconception_id"]]["label"] if r["misconception_id"] in mcs_all else None} for r in recent]}
     return {"class_section": class_section, "doubts": doubts, "student_count": len(students), "concepts": [{"id": c, "name": graph[c]["name"], "chapter": graph[c]["chapter"]} for c in order],
-            "heatmap": matrix, "gaps": gaps, "top_misconceptions": top, "at_risk": sorted(risk, key=lambda r: -r["risk_score"])[:5]}
+            "board": board.class_board(ids), "heatmap": matrix, "gaps": gaps, "top_misconceptions": top, "at_risk": sorted(risk, key=lambda r: -r["risk_score"])[:5]}
 
 
 # ------------------------------------------------------------------ reteach plan

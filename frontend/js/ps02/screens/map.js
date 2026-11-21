@@ -6,6 +6,7 @@ import { getLang, getStudent } from '../state.js';
 import { countUp, level, loading, masteryColors, pct, sparkline } from '../ui.js';
 import { assignmentBanner } from './assignment-banner.js';
 import { chain, verifiedBadge } from './chain.js';
+import { fmt, loadBoard, marksCard } from './marks.js';
 import { diffSnap, readSnap, writeSnap } from '../snapshot.js';
 
 const CHAPTERS = ['Light', 'Human Eye', 'Electricity', 'Magnetism'];
@@ -179,6 +180,13 @@ export async function mapScreen(root, ctx) {
           h('button', { class: 'btn', type: 'button', onClick: () => { showPath(null); requestAnimationFrame(() => showPath(t)); } }, 'Replay the path'),
           h('button', { class: 'btn btn-quiet', type: 'button', onClick: () => { rcBox.hidden = true; showPath(null); } }, 'Hide')));
       showPath(t);
+      boardP.then((b) => {
+        const f = b && mcId && b.fixes.find((x) => x.misconception_id === mcId);
+        if (!f || !ctx.live()) return;
+        const top = b.top_fix;
+        sentence.after(h('p', { class: 'marks-line' }, `🎯 Fixing this wins back about ${fmt(f.marks)} marks`, f.rank === 1 ? ' (the highest-marks fix for you).' : ` (#${f.rank} by marks).`,
+          f.rank !== 1 && top?.concept_id && h('span', null, ' ', h('a', { class: 'link', href: `#/practice?concept=${top.concept_id}&talk=${top.misconception_id}` }, `Highest-marks fix first: ${top.label} (about ${fmt(top.marks)})`))));
+      });
       // upgrade the sentence to the AI-written one when it arrives (the plain one is already on screen)
       api(`/api/ps02/root-cause?${qs({ student_id: studentId, concept_id: t.concept_id, language: getLang() })}`, { timeout: 12000 })
         .then((r) => { if (ctx.live() && r.explanation) sentence.textContent = r.explanation; }).catch(() => {});
@@ -186,6 +194,9 @@ export async function mapScreen(root, ctx) {
   }
 
   // ---------- header
+  const marksSlot = h('div');
+  const boardP = loadBoard(studentId).catch(() => null);      // an extra: the map works without it
+  boardP.then((b) => { if (b && ctx.live()) marksSlot.replaceChildren(marksCard(b)); });
   const avg = nodes.reduce((a, n) => a + n.p_known, 0) / nodes.length;
   const weakest = data.weakest.map((id) => byId[id]);
   const dueCount = nodes.filter((n) => n.review_due).length;
@@ -197,6 +208,7 @@ export async function mapScreen(root, ctx) {
         h('h1', { class: 'page-title' }, teacherView ? `${data.student.name}’s concept map` : `${data.student.name}, here is where you stand`),
         h('p', { class: 'lede' }, `Overall ${pct(avg)}. Strongest in ${chapterAvg[0].c} (${pct(chapterAvg[0].v)}), weakest in ${chapterAvg[3].c} (${pct(chapterAvg[3].v)}).`)),
       h('div', { class: 'legend', 'aria-label': 'Colour legend' }, h('span', null, 'Needs work'), h('i', { class: 'legend-bar' }), h('span', null, 'Strong'))),
+    marksSlot,
     !teacherView && h('section', { class: 'card next-steps' }, h('h2', null, 'Start with the weakest concepts that you are ready for'),
       h('div', { class: 'chips' }, weakest.map((n) => h('a', { class: 'chip chip-action', href: `#/practice?concept=${n.id}` }, `${n.short} · ${pct(n.p_known)}`))),
       h('div', { class: 'row' }, h('a', { class: 'btn btn-primary', href: '#/practice' }, 'Start practising'),

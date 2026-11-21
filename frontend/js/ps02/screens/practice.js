@@ -9,6 +9,7 @@ import { thinkingPanel } from '../thinking-panel.js';
 import { compressPhoto, notebookView, postNotebook, snapControls } from '../notebook.js';
 import { assignmentBanner } from './assignment-banner.js';
 import { mountDialogue } from './dialogue.js';
+import { fixList, loadBoard } from './marks.js';
 import { speak, stop as stopSpeech } from '../tts.js';
 import { matchSpokenOption, questionToSpeech } from '../spoken-answer.js';
 import { listenOnce, readVoiceMode, voiceSupported, writeVoiceMode } from '../voice-io.js';
@@ -54,6 +55,9 @@ export async function practice(root, ctx) {
   const assignSlot = h('div');
   root.replaceChildren(h('section', { class: 'narrow' },
     h('div', { class: 'row between wrap' }, h('div', null, h('p', { class: 'eyebrow' }, review ? 'Spaced-repetition review' : 'Adaptive practice'), counter), h('div', { class: 'row tight' }, voiceBtn, langBar)), assignSlot, stage));
+  const fixSlot = h('div');
+  assignSlot.after(fixSlot);
+  if (!ctx.query.talk && !review) loadBoard(student.id).then((b) => { if (ctx.live() && b.fixes.length) fixSlot.replaceChildren(h('section', { class: 'card fix-strip' }, h('h3', null, '🎯 Highest-marks fix first'), fixList(b, { max: 3 }))); }).catch(() => {});
   if (!ctx.query.talk) assignmentBanner(student, { compact: true }).then((b) => { if (b && ctx.live()) assignSlot.replaceChildren(b); });
 
   async function nextQuestion() {

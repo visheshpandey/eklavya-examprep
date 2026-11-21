@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.ps02 import content, copilot, learner_model as lm, rootcause, seed, service, socratic, srs, teacher, traps
+from app.ps02 import board, content, copilot, learner_model as lm, rootcause, seed, service, socratic, srs, teacher, traps
 
 router = APIRouter()
 
@@ -167,6 +167,13 @@ def dialogue_reply(body: DialogueReply):
 
 def _trace_for(student_id: int, concept_id: str) -> dict:
     return rootcause.trace(concept_id, lm.get_mastery(student_id), service.active_misconceptions(student_id))
+
+
+@router.get("/api/ps02/board")
+def board_view(student_id: int):
+    """🎯 Predicted CBSE Physics score (an estimate, labelled approximate) and the fixes ranked by marks."""
+    _student(student_id)
+    return board.student_board(student_id)
 
 
 @router.get("/api/ps02/struggles")

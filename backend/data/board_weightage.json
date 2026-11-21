@@ -1,0 +1,10 @@
+{
+  "label": "Approximate. Based on the typical CBSE Class 10 Science paper pattern for the Physics chapters; not an official marking scheme.",
+  "total_marks": 25,
+  "marks": {
+    "L1": 0.5, "L2": 1.5, "L3": 1.5, "L4": 1.0, "L5": 1.0, "L6": 1.5,
+    "E1": 0.75, "E2": 1.25, "E3": 1.25, "E4": 0.75,
+    "C1": 1.0, "C2": 1.0, "C3": 1.5, "C4": 1.0, "C5": 1.0, "C6": 1.5, "C7": 1.0,
+    "M1": 1.5, "M2": 2.0, "M3": 2.0, "M4": 0.5
+  }
+}
