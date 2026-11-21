@@ -123,7 +123,7 @@ def _spread_reviews(ids: list[int], rng: random.Random) -> None:
             db.execute("UPDATE reviews SET due_at=? WHERE student_id=? AND concept_id=?", (due.isoformat(timespec="seconds"), sid, r["concept_id"]))
 
 
-PREREQ_GAP = 0.25   # a concept may sit at most this far above its weakest prerequisite
+PREREQ_GAP = 0.10   # a concept may sit at most this far above its weakest prerequisite
 
 # The demo student's headline story is written down, not left to simulation luck, because the Judge tour depends on it:
 # "Series circuits keeps going wrong. You don't have a series problem: you believe current gets used up, in Charge & current."
