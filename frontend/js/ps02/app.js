@@ -12,6 +12,7 @@ import { teacher } from './screens/teacher.js';
 import { how } from './screens/how.js';
 import { notes } from './screens/notes.js';
 import { mountAskWidget } from './ask-widget.js';
+import { startTour } from './tour.js';
 
 const ROUTES = { '': landing, diagnostic, map: mapScreen, practice, reviews, teacher, student: mapScreen, how, notes };
 const NEEDS_STUDENT = new Set(['diagnostic', 'map', 'practice', 'reviews', 'notes']);
@@ -81,6 +82,7 @@ window.addEventListener('ps02:student-gone', () => {   // the saved student id n
 navigator.serviceWorker?.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
 globalThis.caches?.keys().then((keys) => keys.forEach((k) => globalThis.caches.delete(k))).catch(() => {});
 
+document.getElementById('tourNav').addEventListener('click', () => startTour());
 mountAskWidget();   // the floating "Ask a doubt" button lives on every screen
 
 const banner = document.getElementById('banner');

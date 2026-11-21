@@ -226,6 +226,43 @@ def load_fixture() -> dict:
     return {"class_section": CLASS, "students": [{"id": ids[s["id"]], "name": s["name"]} for s in dump["students"]]}
 
 
+TOUR_STUDENTS = ("Aarav Sharma", "Rohan Verma")     # the tour's student and the classmate who shares his misconception
+
+
+def reset_tour_students() -> dict:
+    """Put the Judge tour's students back to the fixture state IN PLACE (same ids, nobody else touched), so a tour always starts from the same story
+    without deleting rows another visitor might be using. Falls back to a full reseed when the demo class does not exist yet."""
+    from app.ps02 import srs
+    live = {r["name"]: r["id"] for r in db.query("SELECT id, name FROM students WHERE is_demo=1 ORDER BY id")}
+    if not FIXTURE.exists() or any(n not in live for n in TOUR_STUDENTS):
+        result = reseed()
+        live = {s["name"]: s["id"] for s in result["students"]}
+        srs.set_time_travel(False)
+        return {"id": live[STORY_STUDENT], "name": STORY_STUDENT, "reseeded": True}
+    dump = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    delta = datetime.now(timezone.utc) - datetime.fromisoformat(dump["generated_at"])
+    by_name = {s["name"]: s["id"] for s in dump["students"]}
+    with db.get_conn() as c:
+        for name in TOUR_STUDENTS:
+            sid, fid = live[name], by_name[name]
+            for table in ("mastery", "attempts", "reviews", "student_misconceptions", "dialogues", "assignment_students", "doubts"):
+                c.execute(f"DELETE FROM {table} WHERE student_id=?", (sid,))
+            for table in ("mastery", "attempts", "reviews", "student_misconceptions"):
+                for row in dump[table]:
+                    if row["student_id"] != fid:
+                        continue
+                    row = dict(row)
+                    row["student_id"] = sid
+                    row.pop("id", None)
+                    for f in _TIME_FIELDS[table]:
+                        row[f] = _shift(row.get(f), delta)
+                    c.execute(f"INSERT INTO {table} ({','.join(row)}) VALUES ({','.join('?' * len(row))})", tuple(row.values()))
+        c.execute("DELETE FROM assignments WHERE id NOT IN (SELECT assignment_id FROM assignment_students)")
+        c.execute("DELETE FROM ps02_cache WHERE cache_key LIKE 'q:%'")
+    srs.set_time_travel(False)
+    return {"id": live[STORY_STUDENT], "name": STORY_STUDENT, "reseeded": False}
+
+
 def reseed(class_section: str = CLASS) -> dict:
     """Wipe the demo class and rebuild it (from the fixture when present, else by simulating). Real students are untouched."""
     _wipe_demo()

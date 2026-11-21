@@ -46,6 +46,8 @@ test('a 404 about the student asks the app to start over; other 404s and other s
   assert.equal(maybeStudentGone(404, 'Question expired. Please fetch the next one.', '/api/practice/answer', { student_id: 1 }), false);
   assert.equal(maybeStudentGone(404, 'Attempt not found', '/api/practice/reasoning', { student_id: 1 }), false);
   assert.equal(maybeStudentGone(404, 'Dialogue not found', '/api/dialogue/reply', { student_id: 1 }), false);
+  assert.equal(maybeStudentGone(404, 'Not Found', '/api/ps02/board?student_id=1', { student_id: 1 }), false);          // a missing ROUTE is not a missing student
+  assert.equal(maybeStudentGone(404, 'Note not found', '/api/ps02/notes/5?student_id=1', null), false);
   assert.equal(maybeStudentGone(500, 'Student not found', '/api/x', null), false);
   assert.equal(maybeStudentGone(422, 'Student not found', '/api/x', null), false);
   assert.equal(events.length, 1);

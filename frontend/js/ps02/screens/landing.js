@@ -3,6 +3,7 @@ import { h } from '../dom.js';
 import { clearStudent, getStudent, setStudent } from '../state.js';
 import { toast } from '../ui.js';
 import { heroDemo } from '../hero-demo.js';
+import { startTour } from '../tour.js';
 
 export async function landing(root) {
   const existing = getStudent();
@@ -38,6 +39,7 @@ export async function landing(root) {
       h('h1', { class: 'hero-title' }, 'Generic AI tutors answer questions. Eklavya knows what you don’t understand, and why.'),
       h('p', { class: 'hero-sub' }, 'Take a 14-question diagnostic, see your concept map, then practise on exactly what is weak. When you get one wrong, say why in your own words (by voice, if you like) and Eklavya names the misconception behind it.'),
       h('div', { class: 'hero-actions' },
+        h('button', { class: 'btn btn-judge', type: 'button', onClick: async (e) => { const b = e.currentTarget; b.disabled = true; b.textContent = 'Preparing the demo…'; await startTour(); b.disabled = false; b.textContent = '👩‍⚖️ Judge tour (2 min)'; } }, '👩‍⚖️ Judge tour (2 min)'),
         existing && h('a', { class: 'btn btn-primary', href: '#/map' }, `Continue as ${existing.name}`),
         h('button', { class: `btn ${existing ? '' : 'btn-primary'}`, type: 'button', onClick: () => { form.hidden = false; nameInput.focus(); } }, existing ? 'Start as a new student' : 'Start as student'),
         h('a', { class: 'btn', href: '#/teacher' }, 'Open teacher dashboard'),

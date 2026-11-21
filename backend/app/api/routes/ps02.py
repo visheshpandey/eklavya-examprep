@@ -269,6 +269,12 @@ def demo_seed():
     return seed.reseed()
 
 
+@router.post("/api/demo/tour-reset")
+def demo_tour_reset():
+    """Start of the Judge tour: restore the demo student (and his classmate) to the known story, in place. Other students and visitors are untouched."""
+    return {"student": seed.reset_tour_students()}
+
+
 @router.get("/api/demo/time-travel")
 def get_time_travel():
     return {"on": srs.time_travel()}

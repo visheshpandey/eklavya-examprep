@@ -1,6 +1,5 @@
 // All backend calls. Fetches never go to a third party; the backend holds the keys.
 import { API_BASE } from '../lib/config.js';
-import { getStudent } from './state.js';
 import { deepMath } from './math-text.js';
 
 /** The message in an error body. This app's handler answers {"error": "...", "code": "..."}; plain FastAPI answers {"detail": "..."}. */
@@ -9,16 +8,12 @@ export function errorText(body) {
   return typeof v === 'string' ? v : '';
 }
 
-// 404s that are about something other than the student (so they must NOT wipe the saved student)
-const NOT_ABOUT_THE_STUDENT = /question|attempt|dialogue|note|concept|misconception|expired|document|assignment|lesson/i;
-
-/** A 404 from ANY endpoint that is about the stored student (it says "student", or the request carried the stored id and is not about something else)
- *  means the saved student no longer exists on the server (database reset). Tell the app to start over. */
+/** A 404 from ANY endpoint whose message is about the student ("Student not found") means the saved student no longer exists on the server
+ *  (database reset): tell the app to forget it and start over. A 404 about anything else (an expired question, a missing note, a route that does not
+ *  exist) is NOT that, even when the request carried the student's id. */
 export function maybeStudentGone(status, message, path, body) {
   if (status !== 404) return false;
-  const stored = getStudent();
-  const carriesId = stored != null && (String(path).includes(`student_id=${stored.id}`) || (body && Number(body.student_id) === Number(stored.id)));
-  const gone = /student/i.test(message || '') || (carriesId && !NOT_ABOUT_THE_STUDENT.test(message || ''));
+  const gone = /student/i.test(message || '');
   if (gone) globalThis.dispatchEvent?.(new CustomEvent('ps02:student-gone'));
   return gone;
 }
