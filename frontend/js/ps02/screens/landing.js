@@ -1,37 +1,13 @@
 import { api } from '../api.js';
 import { h } from '../dom.js';
-import { clearStudent, getStudent, setStudent } from '../state.js';
+import { getRole, getStudent, getToken } from '../state.js';
 import { toast } from '../ui.js';
 import { heroDemo } from '../hero-demo.js';
 import { startTour } from '../tour.js';
 
 export async function landing(root) {
-  const existing = getStudent();
+  const existing = getToken() && getRole() === 'student' ? getStudent() : null;
   const status = h('p', { class: 'form-status', role: 'status' });
-  const nameInput = h('input', { id: 'studentName', class: 'input', type: 'text', maxlength: '40', autocomplete: 'given-name', placeholder: 'Your first name', required: true });
-  const startBtn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Begin the diagnostic');
-  const form = h('form', { class: 'start-form', hidden: true, onSubmit: async (e) => {
-    e.preventDefault();
-    startBtn.disabled = true; status.textContent = 'Creating your profile…';
-    try {
-      const s = await api('/api/students', { method: 'POST', body: { name: nameInput.value.trim() || 'Student', class_section: '' } });
-      setStudent({ id: s.id, name: s.name });
-      location.hash = '#/diagnostic';
-    } catch (err) { status.textContent = err.message; startBtn.disabled = false; }
-  } },
-  h('label', { for: 'studentName' }, 'What should we call you?'), h('div', { class: 'row' }, nameInput, startBtn),
-  h('p', { class: 'muted small' }, '14 short questions across Light, Human Eye, Electricity and Magnetism. No feedback until the end; it is a diagnostic, not a test.'));
-
-  const demoBtn = h('button', { class: 'btn', type: 'button', onClick: async () => {
-    demoBtn.disabled = true; status.textContent = 'Loading a demo student…';
-    try {
-      const { students } = await api('/api/students');
-      if (!students.length) throw new Error('The demo class is still being prepared. Try again in a moment.');
-      const demo = students[0];
-      setStudent({ id: demo.id, name: demo.name, demo: true });
-      location.hash = '#/map';
-    } catch (err) { status.textContent = err.message; demoBtn.disabled = false; toast(err.message); }
-  } }, 'Try demo student');
 
   root.replaceChildren(
     h('div', { class: 'hero-wrap' }, h('section', { class: 'hero' },
@@ -40,12 +16,9 @@ export async function landing(root) {
       h('p', { class: 'hero-sub' }, 'Take a 14-question diagnostic, see your concept map, then practise on exactly what is weak. When you get one wrong, say why in your own words (by voice, if you like) and Eklavya names the misconception behind it.'),
       h('div', { class: 'hero-actions' },
         h('button', { class: 'btn btn-judge', type: 'button', onClick: async (e) => { const b = e.currentTarget; b.disabled = true; b.textContent = 'Preparing the demo…'; await startTour(); b.disabled = false; b.textContent = '👩‍⚖️ Judge tour (2 min)'; } }, '👩‍⚖️ Judge tour (2 min)'),
-        existing && h('a', { class: 'btn btn-primary', href: '#/map' }, `Continue as ${existing.name}`),
-        h('button', { class: `btn ${existing ? '' : 'btn-primary'}`, type: 'button', onClick: () => { form.hidden = false; nameInput.focus(); } }, existing ? 'Start as a new student' : 'Start as student'),
-        h('a', { class: 'btn', href: '#/teacher' }, 'Open teacher dashboard'),
-        demoBtn),
-      existing && h('p', { class: 'muted small' }, `Not ${existing.name}? `, h('button', { class: 'link-btn', type: 'button', onClick: () => { clearStudent(); location.hash = '#/'; location.reload(); } }, 'Use a different name')),
-      form, status), heroDemo()),
+        existing ? h('a', { class: 'btn btn-primary', href: '#/map' }, `Continue as ${existing.name}`) : h('a', { class: 'btn btn-primary', href: '#/login' }, 'Student login'),
+        getToken() && getRole() === 'teacher' ? h('a', { class: 'btn btn-primary', href: '#/teacher' }, 'Open teacher dashboard') : h('a', { class: 'btn', href: '#/login?as=teacher' }, 'Teacher login')),
+      status), heroDemo()),
     h('section', { class: 'pillars', 'aria-label': 'What is inside' },
       pillar('1', 'Diagnose', 'A hand-written diagnostic whose wrong options are built from real misconceptions.', '#/how'),
       pillar('2', 'Model', 'Per-concept mastery (Bayesian Knowledge Tracing) over a prerequisite graph, updated after every answer.', '#/how'),

@@ -163,6 +163,7 @@ SCHEMA += PS02_SCHEMA
 
 # Columns added after the first release: (table, column, type). init_db adds any that an older database lacks.
 MIGRATIONS = (
+    ("users", "role", "TEXT DEFAULT 'student'"),                # PS02 logins: 'student' | 'teacher'
     ("student_misconceptions", "verified", "INTEGER DEFAULT 0"),     # PS02: Detected -> Resolved -> Verified
     ("student_misconceptions", "verified_at", "TEXT"),
     ("student_misconceptions", "last_source", "TEXT"),      # PS02: voice | text | notebook
@@ -211,6 +212,19 @@ def _get_pool():
     return _pool
 
 
+def _tables_without_id() -> set[str]:
+    """Tables whose rows have no ``id`` column (composite keys): an insert into them must not ask Postgres for RETURNING id."""
+    out = set()
+    for script in (SCHEMA, PS02_SCHEMA):
+        for name, body in re.findall(r"CREATE TABLE IF NOT EXISTS (\w+) \((.*?)\);", script, re.S):
+            if not re.search(r"\bid INTEGER PRIMARY KEY", body):
+                out.add(name)
+    return out
+
+
+_NO_ID = _tables_without_id()
+
+
 def _pg_sql(sql, returning=True):
     """SQLite-style statement -> Postgres: ? placeholders, OR IGNORE/REPLACE, timestamps, and RETURNING id for inserts."""
     sql = sql.replace("%", "%%").replace("?", "%s").replace("CURRENT_TIMESTAMP", _NOW)
@@ -219,7 +233,8 @@ def _pg_sql(sql, returning=True):
     ignore = bool(re.match(r"\s*INSERT OR IGNORE", sql))
     if ignore:
         sql = sql.replace("INSERT OR IGNORE INTO", "INSERT INTO", 1) + " ON CONFLICT DO NOTHING"
-    if returning and re.match(r"\s*INSERT INTO (?!chunk_embeddings)", sql):
+    target = re.match(r"\s*INSERT INTO (\w+)", sql)
+    if returning and target and target.group(1) not in _NO_ID and target.group(1) != "chunk_embeddings":
         sql += " RETURNING id"
     return sql
 

@@ -6,7 +6,7 @@ from app.api.routes import documents
 from app.errors import BadRequestError
 from fastapi.concurrency import run_in_threadpool
 
-from app.ps02 import content, doubts, notebook, notes, question_gen, service
+from app.ps02 import logins, content, doubts, notebook, notes, question_gen, service
 
 router = APIRouter()
 
@@ -20,6 +20,7 @@ class DoubtIn(BaseModel):
 
 
 def _student(student_id: int) -> dict:
+    logins.check_student(student_id)
     s = service.get_student(student_id)
     if not s:
         raise HTTPException(404, "Student not found")
@@ -56,6 +57,8 @@ def list_class_notes(class_section: str):
 @router.post("/api/ps02/notes")
 async def upload_notes(student_id: int | None = Form(None), class_section: str | None = Form(None), file: UploadFile = File(None), text: str = Form(None)):
     """Upload a PDF / TXT / photo or pasted text through Eklavya's original ingest (chunking, topics, embeddings)."""
+    if student_id is None:
+        logins.check_teacher()          # class notes are the teacher's
     if student_id is not None:
         _student(student_id)
     try:
@@ -104,6 +107,10 @@ async def read_notebook(student_id: int = Form(...), attempt_id: int | None = Fo
 
 @router.delete("/api/ps02/notes/{document_id}")
 def delete_note(document_id: int, student_id: int | None = None, class_section: str | None = None):
+    if student_id is None:
+        logins.check_teacher()
+    else:
+        logins.check_student(student_id)
     if not notes.delete_note(document_id, student_id, class_section):
         raise HTTPException(404, "Note not found")
     question_gen.clear_prefetch(None if class_section else student_id)

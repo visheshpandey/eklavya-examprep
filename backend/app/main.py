@@ -46,8 +46,9 @@ async def _clear_old_guests() -> None:
 async def _seed_demo_class() -> None:
     """The teacher dashboard must look alive on first load: build the demo class if it does not exist yet."""
     try:
-        from app.ps02 import seed
+        from app.ps02 import logins, seed
         await asyncio.to_thread(seed.ensure_seeded)
+        await asyncio.to_thread(logins.ensure_demo_accounts)
     except Exception:  # noqa: BLE001 - the app still works; POST /api/demo/seed rebuilds it
         logging.getLogger(__name__).warning("Could not seed the PS02 demo class", exc_info=True)
 
@@ -87,6 +88,25 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def student_timezone(request: Request, call_next):
         use_timezone(request.headers.get("x-timezone"))   # "today" means the student's today, not the server's
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def ps02_logins(request: Request, call_next):
+        """Who is calling (student / teacher), and teacher-only pages. Does nothing unless PS02_AUTH_REQUIRED is on."""
+        from fastapi.responses import JSONResponse
+        from app.errors import AppError
+        from app.ps02 import logins
+        token = None
+        header = request.headers.get("authorization", "")
+        if header.lower().startswith("bearer "):
+            token = header[7:].strip() or None
+        try:
+            logins.CALLER.set(logins.caller_from_token(token) if logins.required() and token else None)
+            path = request.url.path
+            if logins.required() and request.method != "OPTIONS" and (path.startswith(("/api/teacher/", "/api/students")) or path == "/api/demo/seed-class"):
+                logins.check_teacher()
+        except AppError as exc:
+            return JSONResponse({"error": exc.message if hasattr(exc, "message") else str(exc), "code": exc.code}, status_code=exc.status_code)
         return await call_next(request)
     app.include_router(api_router)
 

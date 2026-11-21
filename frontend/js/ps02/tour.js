@@ -4,7 +4,7 @@
 import { api } from './api.js';
 import { API_BASE } from '../lib/config.js';
 import { h } from './dom.js';
-import { getStudent, setLang, setStudent } from './state.js';
+import { getStudent, getToken, setLang, setSession, setStudent } from './state.js';
 import { toast } from './ui.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -32,7 +32,7 @@ async function answerWrong() {
 
 /** Does this endpoint exist? A plain fetch, so a 404 here can never be mistaken for "the student is gone". */
 async function exists(path) {
-  try { const res = await fetch(`${API_BASE}${path}`); return res.ok; } catch { return false; }
+  try { const res = await fetch(`${API_BASE}${path}`, { headers: getToken() ? { authorization: `Bearer ${getToken()}` } : {} }); return res.ok; } catch { return false; }
 }
 
 const HINGLISH = 'bulb mein current kha jaata hai, isliye resistor ke baad current kam bachta hai';
@@ -109,8 +109,10 @@ export function tourActive() { return Boolean(state); }
 export async function startTour() {
   if (state) return;
   let student;
-  try { ({ student } = await api('/api/demo/tour-reset', { method: 'POST', timeout: 30000 })); }
+  let tourToken = null;
+  try { ({ student, token: tourToken } = await api('/api/demo/tour-reset', { method: 'POST', timeout: 30000 })); }
   catch (err) { toast(err.message || 'Could not prepare the demo. Please try again.'); return; }
+  if (tourToken) setSession({ token: tourToken, role: 'teacher' });   // the tour shows both sides, so it runs with the demo teacher's pass
   setStudent({ id: student.id, name: student.name, demo: true });
   setLang('hinglish');
   try { sessionStorage.removeItem('ps02.thinkSeen'); localStorage.removeItem(`ps02.snap.${student.id}`); } catch { /* ignore */ }
@@ -211,5 +213,6 @@ async function end(finished) {
   globalThis.removeEventListener('ps02:student-gone', end);
   state = null;
   try { await api('/api/demo/time-travel', { method: 'POST', body: { on: false }, timeout: 8000 }); } catch { /* best effort */ }
-  if (finished === true) { toast('Tour finished. Explore freely: you are signed in as the demo student.'); location.hash = '#/map'; }
+  if (finished === true) { try { setSession(await api('/api/ps02/auth/demo', { method: 'POST', body: { role: 'student' } })); } catch { /* stay as is */ }
+    toast('Tour finished. Explore freely: you are signed in as the demo student.'); location.hash = '#/map'; }
 }

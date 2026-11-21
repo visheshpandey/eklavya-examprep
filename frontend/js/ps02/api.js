@@ -1,6 +1,10 @@
 // All backend calls. Fetches never go to a third party; the backend holds the keys.
 import { API_BASE } from '../lib/config.js';
 import { deepMath } from './math-text.js';
+import { getToken } from './state.js';
+
+const authHeader = () => (getToken() ? { authorization: `Bearer ${getToken()}` } : {});
+function needLogin(status) { if (status === 401) globalThis.dispatchEvent?.(new CustomEvent('ps02:auth-needed')); }
 
 /** The message in an error body. This app's handler answers {"error": "...", "code": "..."}; plain FastAPI answers {"detail": "..."}. */
 export function errorText(body) {
@@ -28,12 +32,13 @@ export async function api(path, { method = 'GET', body, timeout = 45000 } = {}) 
   try {
     const res = await fetch(API_BASE + path, {
       method, signal: controller.signal,
-      headers: body ? { 'content-type': 'application/json' } : undefined,
+      headers: { ...authHeader(), ...(body ? { 'content-type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
       let detail = '';
       try { detail = errorText(await res.json()); } catch { /* not json */ }
+      if (!path.startsWith('/api/ps02/auth/login') && !path.startsWith('/api/ps02/auth/register')) needLogin(res.status);
       maybeStudentGone(res.status, detail, path, body);
       throw new ApiError(detail || `The server answered ${res.status}.`, res.status);
     }
@@ -60,10 +65,11 @@ export async function apiUpload(path, formData, { timeout = 120000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const res = await fetch(API_BASE + path, { method: 'POST', body: formData, signal: controller.signal });
+    const res = await fetch(API_BASE + path, { method: 'POST', headers: authHeader(), body: formData, signal: controller.signal });
     if (!res.ok) {
       let detail = '';
       try { detail = errorText(await res.json()); } catch { /* not json */ }
+      needLogin(res.status);
       maybeStudentGone(res.status, detail, path, { student_id: formData.get?.('student_id') });
       throw new ApiError(detail || `The upload failed (${res.status}).`, res.status);
     }
@@ -79,10 +85,11 @@ export async function apiStream(path, body, onEvent, { timeout = 60000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const res = await fetch(API_BASE + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
+    const res = await fetch(API_BASE + path, { method: 'POST', headers: { ...authHeader(), 'content-type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
     if (!res.ok) {
       let detail = '';
       try { detail = errorText(await res.json()); } catch { /* not json */ }
+      needLogin(res.status);
       maybeStudentGone(res.status, detail, path, body);
       throw new ApiError(detail || `The server answered ${res.status}.`, res.status);
     }

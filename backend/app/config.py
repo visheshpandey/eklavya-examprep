@@ -80,6 +80,9 @@ class Settings:
     demo_user_id: int
     timezone: str          # the calendar used for "today" when the browser does not say (APP_TIMEZONE)
     auth_secret: str            # signs login tokens; empty = a random one is kept next to the database
+    ps02_auth_required: bool    # PS02 student / teacher logins; off by default so tests and plain local use are unchanged
+    teacher_email: str          # the demo teacher account, re-created on every start
+    teacher_password: str
     # --- accounts, email, reminders (each feature stays off until its settings are filled in)
     app_url: str                # the frontend address, used in links inside emails
     google_client_id: str       # Google sign-in (OAuth client id); empty = no Google button
@@ -122,6 +125,9 @@ class Settings:
             demo_user_id=_int("DEMO_USER_ID", 1, minimum=1),
             timezone=_str("APP_TIMEZONE", "Asia/Kolkata"),
             auth_secret=_str("AUTH_SECRET"),
+            ps02_auth_required=_bool("PS02_AUTH_REQUIRED", False),
+            teacher_email=_str("TEACHER_EMAIL", "teacher@eklavya.demo").lower(),
+            teacher_password=_str("TEACHER_PASSWORD", "teacher-demo-1"),
             app_url=_str("APP_URL", "http://localhost:3000").rstrip("/"),
             google_client_id=_str("GOOGLE_CLIENT_ID"),
             smtp_host=_str("SMTP_HOST", "smtp.gmail.com"),

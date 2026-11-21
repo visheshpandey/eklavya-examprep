@@ -531,3 +531,11 @@ body.tour-on .ask-fab, body.tour-on .ask-panel { display: none !important; }
 .marks-line { margin: var(--s-2) 0; font-weight: 500; }
 .fix-strip { margin-bottom: var(--s-3); }
 @media (max-width: 560px) { .marks-chapters li { grid-template-columns: 78px 1fr 48px; } }
+
+
+/* ---- Login ---- */
+.login-card { display: grid; gap: var(--s-3); }
+.login-form { display: grid; gap: var(--s-3); }
+.field { display: grid; gap: 4px; }
+.field label { font-weight: 500; font-size: var(--text-sm, .9rem); }
+.login-demo { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: center; border-top: 1px solid var(--line); padding-top: var(--s-3); }

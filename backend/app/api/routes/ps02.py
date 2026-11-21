@@ -1,11 +1,11 @@
 """Eklavya Exam Prep (PS02) endpoints. Students are identified by ``student_id`` (no login: this is the hackathon demo)."""
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.ps02 import board, content, copilot, learner_model as lm, rootcause, seed, service, socratic, srs, teacher, traps
+from app.ps02 import board, logins, content, copilot, learner_model as lm, rootcause, seed, service, socratic, srs, teacher, traps
 
 router = APIRouter()
 
@@ -86,14 +86,61 @@ class TimeTravelIn(BaseModel):
 
 
 def _student(student_id: int) -> dict:
+    logins.check_student(student_id)         # a student can only open their own profile (when PS02_AUTH_REQUIRED is on)
     s = service.get_student(student_id)
     if not s:
         raise HTTPException(404, "Student not found")
     return s
 
 
+class RegisterIn(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+    email: str = Field(max_length=120)
+    password: str = Field(min_length=1, max_length=200)
+    class_section: str = Field(default="", max_length=20)
+
+
+class LoginIn(BaseModel):
+    email: str = Field(max_length=120)
+    password: str = Field(min_length=1, max_length=200)
+    role: str | None = None
+
+
+class DemoLoginIn(BaseModel):
+    role: str = Field(pattern="^(student|teacher)$")
+
+
+def _ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+@router.post("/api/ps02/auth/register")
+def auth_register(body: RegisterIn, request: Request):
+    return logins.register(body.name, body.email, body.password, body.class_section, _ip(request))
+
+
+@router.post("/api/ps02/auth/login")
+def auth_login(body: LoginIn, request: Request):
+    return logins.login(body.email, body.password, _ip(request), body.role)
+
+
+@router.post("/api/ps02/auth/demo")
+def auth_demo(body: DemoLoginIn):
+    """One-click demo student / demo teacher (demo data only), so judges never have to register."""
+    return logins.demo_login(body.role)
+
+
+@router.get("/api/ps02/auth/me")
+def auth_me():
+    who = logins.CALLER.get()
+    if not who:
+        raise HTTPException(401, "Please sign in.")
+    return logins._session(who["uid"])
+
+
 @router.post("/api/students")
 def create_student(body: StudentIn):
+    logins.check_teacher()                   # students get a profile by registering; creating bare profiles is for teachers
     return service.create_student(body.name, body.class_section)
 
 
@@ -289,8 +336,10 @@ def demo_seed():
 
 @router.post("/api/demo/tour-reset")
 def demo_tour_reset():
-    """Start of the Judge tour: restore the demo student (and his classmate) to the known story, in place. Other students and visitors are untouched."""
-    return {"student": seed.reset_tour_students()}
+    """Start of the Judge tour: restore the demo student (and his classmate) to the known story, in place. Other students and visitors are untouched.
+    The reply carries a demo-teacher token (demo data only), so the tour can show both the student and the teacher side while logins are required."""
+    student = seed.reset_tour_students()
+    return {"student": student, "token": logins.demo_login("teacher")["token"]}
 
 
 @router.get("/api/ps02/checks")
