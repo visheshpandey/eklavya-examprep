@@ -12,6 +12,7 @@ import sqlite3
 from contextlib import contextmanager
 
 from app.config import settings
+from app.ps02.schema import PS02_SCHEMA
 
 log = logging.getLogger(__name__)
 
@@ -158,6 +159,7 @@ CREATE TABLE IF NOT EXISTS challenge_attempts (
     seconds INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(challenge_id, user_id)
 );
 """
+SCHEMA += PS02_SCHEMA
 
 # Columns added after the first release: (table, column, type). init_db adds any that an older database lacks.
 MIGRATIONS = (

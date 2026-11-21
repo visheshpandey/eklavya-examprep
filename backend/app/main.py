@@ -43,8 +43,18 @@ async def _clear_old_guests() -> None:
         logging.getLogger(__name__).warning("Could not clear old guests", exc_info=True)
 
 
+async def _seed_demo_class() -> None:
+    """The teacher dashboard must look alive on first load: build the demo class if it does not exist yet."""
+    try:
+        from app.ps02 import seed
+        await asyncio.to_thread(seed.ensure_seeded)
+    except Exception:  # noqa: BLE001 - the app still works; POST /api/demo/seed rebuilds it
+        logging.getLogger(__name__).warning("Could not seed the PS02 demo class", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    class_seeder = asyncio.create_task(_seed_demo_class())
     watcher = asyncio.create_task(lag_monitor.watch())
     renamer = asyncio.create_task(_name_old_videos())
     retitler = asyncio.create_task(_retitle_old_notes())
@@ -56,6 +66,7 @@ async def lifespan(_: FastAPI):
         renamer.cancel()
         retitler.cancel()
         sweeper.cancel()
+        class_seeder.cancel()
 
 
 def create_app() -> FastAPI:
