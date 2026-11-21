@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { h } from '../dom.js';
 import { createDictation } from '../../lib/dictation.js';
 import { getLang } from '../state.js';
-import { deltaList, animateBars } from './deltas.js';
+import { deltaList } from './deltas.js';
 
 const STEPS = [['holds', 'Still holds it'], ['wavering', 'Wavering'], ['resolved', 'Resolved']];
 const MUTE_KEY = 'ps02.mute';
@@ -116,7 +116,7 @@ export function mountDialogue({ student, attemptId, onDone, onUnavailable }) {
     const outro = h('div', { class: `dlg-outro ${result.status === 'resolved' ? 'dlg-won' : ''}` });
     if (result.status === 'resolved') {
       outro.append(h('h3', null, 'You un-learned it. 🎉'), h('p', null, 'You explained it yourself, so this counts as fixed, not just a lucky click.'));
-      if (result.mastery_changes) { const d = deltaList(result.mastery_changes, { title: 'Your mastery jumped' }); outro.append(d); animateBars(d, result.mastery_changes); }
+      if (result.mastery_changes) { outro.append(deltaList(result.mastery_changes, { title: 'Your mastery, after explaining it yourself' })); }
     } else if (result.status === 'unresolved') {
       outro.append(h('h3', null, 'Not quite there yet, and that is okay'), h('p', null, 'We will bring this concept back for a quick review soon, so it sticks.'));
     }

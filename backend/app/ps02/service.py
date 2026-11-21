@@ -189,6 +189,7 @@ def next_question(student_id: int, review: bool = False, concept_id: str | None 
     if q is None:
         active = [m["id"] for m in active_misconceptions(student_id) if cid in content.misconceptions()[m["id"]]["concept_ids"]]
         q = question_gen.generate(cid, diff, active, _recent_stems(student_id))
+    q = {**q, "difficulty": diff}   # the badge, the stored question, BKT and the "why" line all use the planner's one difficulty value
     return public_question(_store_question(student_id, q), q, plan)
 
 

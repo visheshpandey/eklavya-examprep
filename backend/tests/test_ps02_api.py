@@ -184,3 +184,22 @@ def test_unknown_misconception_still_returns_specific_label_and_fix(monkeypatch)
 def test_prefetch_endpoint():
     sid = new_student()
     assert client.post("/api/practice/prefetch", params={"student_id": sid}).json()["started"] is True
+
+
+def test_badge_and_why_use_the_same_difficulty(monkeypatch):
+    # the model labels its question difficulty 3, but the planner decided; the served question must carry the planner's value
+    monkeypatch.setattr(gemini, "llm_json", lambda *a, **k: {"stem": "Unique stem for difficulty test?", "options": ["a", "b", "c", "d"], "correct_index": 0, "difficulty": 3})
+    sid = new_student()
+    client.post("/api/diagnostic/submit", json={"student_id": sid, "answers": []})
+    q = client.get("/api/practice/next", params={"student_id": sid}).json()
+    assert f"difficulty {q['difficulty']}" in q["why"]
+    from app import db
+    stored = db.one("SELECT payload FROM ps02_cache WHERE cache_key=?", (f"q:{q['question_id']}",))["payload"]
+    assert f'"difficulty": {q["difficulty"]}' in stored
+
+
+def test_confidence_is_reported_as_a_label():
+    from app.ps02 import misconception
+    q = content.diagnostic()[7]
+    r = misconception.classify(q, 0, "bulb current kha jaata hai", "C1", None)
+    assert r["confidence_label"] in ("High", "Medium", "Low")

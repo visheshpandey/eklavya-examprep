@@ -17,6 +17,7 @@ export async function api(path, { method = 'GET', body, timeout = 45000 } = {}) 
     if (!res.ok) {
       let detail = '';
       try { const j = await res.json(); detail = j.detail || j.message || ''; } catch { /* not json */ }
+      if (res.status === 404 && /student not found/i.test(String(detail))) globalThis.dispatchEvent(new CustomEvent('ps02:student-gone'));   // a stale saved student: start over
       throw new ApiError(typeof detail === 'string' && detail ? detail : `The server answered ${res.status}.`, res.status);
     }
     return await res.json();

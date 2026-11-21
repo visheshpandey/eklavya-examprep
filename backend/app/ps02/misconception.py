@@ -118,6 +118,6 @@ def classify(question: dict, chosen_index: int, reasoning: str, concept_id: str,
         diag.feedback_hinglish = diag.feedback_english
     out = diag.model_dump()
     specific = diag.new_label if diag.misconception_id == "MC_UNKNOWN" and diag.new_label else None   # an unknown error keeps its own specific label, not the catalogue's generic one
-    out.update({"source": source, "label": specific or (entry["label"] if entry else "Needs a closer look"),
+    out.update({"confidence_label": "High" if diag.confidence >= 0.75 else "Medium" if diag.confidence >= 0.5 else "Low", "source": source, "label": specific or (entry["label"] if entry else "Needs a closer look"),
                 "correction": entry["correction"] if entry else "", "analogy": entry["analogy"] if entry else ""})
     return out

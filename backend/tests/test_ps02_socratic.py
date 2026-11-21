@@ -53,8 +53,7 @@ def test_resolves_only_when_the_judge_says_resolved_and_gain_beats_plain_correct
     r2 = client.post("/api/dialogue/reply", json={"student_id": sid, "dialogue_id": d["dialogue_id"], "text": "current same rehta hai, sirf energy use hoti hai", "mode": "voice"}).json()
     assert r2["status"] == "resolved" and r2["progress"] == "resolved" and r2["reveal"]["correction"]
     gain = lm.get_mastery(sid)["C1"] - before
-    plain = lm.bkt_update(before, True) - before
-    assert gain > plain > 0                                          # explaining it beats a plain correct click
+    assert 0 < gain <= socratic.MAX_RESOLVE_GAIN + 1e-9              # a resolved dialogue lifts mastery, but never by more than 25 points
     resolved = db.one("SELECT resolved FROM student_misconceptions WHERE student_id=? AND misconception_id='MC01'", (sid,))
     assert resolved["resolved"] == 1
     again = client.post("/api/dialogue/reply", json={"student_id": sid, "dialogue_id": d["dialogue_id"], "text": "thanks"}).json()
@@ -144,3 +143,33 @@ def test_fallback_hints_never_reveal_the_answer(monkeypatch):
         assert mc["analogy"] not in r["say"] and mc["correction"] not in r["say"]
         if r["status"] != "open":
             break
+
+
+def test_a_clearly_correct_first_reply_resolves_immediately(monkeypatch):
+    sid, att = wrong_attempt()
+    d = client.post("/api/dialogue/start", json={"student_id": sid, "attempt_id": att}).json()
+    monkeypatch.setattr(gemini, "llm_json", verdict("resolved", "Bilkul sahi!", still=False, move="confirm"))
+    r = client.post("/api/dialogue/reply", json={"student_id": sid, "dialogue_id": d["dialogue_id"], "text": "current same rehta hai, bulb sirf energy leta hai"}).json()
+    assert r["status"] == "resolved" and r["turns_used"] == 1 and r["mastery_changes"]
+
+
+def test_resolved_gain_is_capped_at_25_points_even_from_a_very_low_start(monkeypatch):
+    sid, att = wrong_attempt()
+    lm.save_mastery(sid, {"C1": 0.10})
+    d = client.post("/api/dialogue/start", json={"student_id": sid, "attempt_id": att}).json()
+    monkeypatch.setattr(gemini, "llm_json", verdict("resolved", "Sahi!", still=False, move="confirm"))
+    r = client.post("/api/dialogue/reply", json={"student_id": sid, "dialogue_id": d["dialogue_id"], "text": "charge use nahi hota"}).json()
+    for m in r["mastery_changes"]:
+        assert m["after"] - m["before"] <= 0.25 + 1e-9
+    assert lm.get_mastery(sid)["C1"] <= 0.35 + 1e-9
+
+
+def test_reseed_command_removes_test_students_and_rebuilds_the_class():
+    from app.ps02 import reseed
+    sid = service.create_student("QA Check", "10-B")["id"]
+    service.create_student("Real One", "10-B")
+    assert reseed.delete_by_name(["qa check", "nobody"]) == ["QA Check"]
+    assert db.one("SELECT id FROM students WHERE id=?", (sid,)) is None
+    out = reseed.reset_all()
+    assert len(out["students"]) == 6 and db.one("SELECT COUNT(*) AS n FROM students")["n"] == 6      # every other student is gone too
+    assert db.one("SELECT COUNT(*) AS n FROM dialogues WHERE student_id NOT IN (SELECT id FROM students)")["n"] == 0

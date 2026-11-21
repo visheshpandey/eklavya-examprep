@@ -20,7 +20,8 @@ from app.ps02 import content, learner_model as lm, llm, srs
 log = logging.getLogger(__name__)
 MAX_TURNS = 4
 JUDGE_DEADLINE_S = 8.0
-RESOLVE_LEARN = 0.35              # a resolved dialogue teaches more than a lucky click (plain correct uses 0.15)
+RESOLVE_LEARN = 0.35              # learning rate for a resolved dialogue (a plain correct click uses 0.15)
+MAX_RESOLVE_GAIN = 0.25           # but one resolved dialogue never adds more than 25 points of mastery
 
 LANG_NAMES = {"hinglish": "Hinglish (Hindi in Roman script mixed with English, the way students talk)", "english": "simple English",
               "hindi": "Hindi in Devanagari script"}
@@ -33,6 +34,7 @@ Rules:
 - next_move: "hint" (a small nudge), "question" (a new guiding question), "counterexample" (a situation that contradicts their idea), or "confirm" (they got it).
 - Judge the student's LAST reply against the correct idea: understanding "none" (still wrong or off-topic), "partial" (moving the right way but incomplete), or
   "resolved" (they explained the correct idea clearly in their own words; repeating your hint back, or a bare "yes/ok", is NOT resolved).
+- If the student's FIRST reply is already clearly correct and complete, mark it "resolved" straight away (confirm warmly, do not make them go through more questions).
 - still_holds_misconception is true while they still believe the wrong idea. Be kind; never say "wrong" harshly.
 Return ONLY JSON: {"understanding": "none|partial|resolved", "still_holds_misconception": bool, "next_move": "hint|question|counterexample|confirm", "say": str}"""
 
@@ -162,7 +164,7 @@ def _resolve(student_id: int, row: dict) -> list[dict]:
     for i, cid in enumerate(targets):
         before = mastery[cid]
         weight = 1.0 if i == 0 else 0.5
-        mastery[cid] = round(lm.bkt_update(before, True, learn=RESOLVE_LEARN, weight=weight), 4)
+        mastery[cid] = round(min(lm.bkt_update(before, True, learn=RESOLVE_LEARN, weight=weight), before + MAX_RESOLVE_GAIN, 0.99), 4)
         deltas.append({"concept_id": cid, "name": graph[cid]["name"], "before": round(before, 4), "after": mastery[cid],
                        "reason": "explained the idea in their own words" if i == 0 else "prerequisite effect (misconception resolved)"})
     lm.save_mastery(student_id, {d["concept_id"]: d["after"] for d in deltas})

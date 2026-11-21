@@ -66,6 +66,9 @@ async function render() {
 }
 
 window.addEventListener('hashchange', render);
+window.addEventListener('ps02:student-gone', () => {   // the saved student id no longer exists on the server (database reset)
+  clearStudent(); toast('That student no longer exists, so we started you fresh.'); if (location.hash === '#/' || location.hash === '') render(); else location.hash = '#/';
+});
 
 // A service worker from the old Eklavya build (same address while developing) would serve stale files: remove it.
 navigator.serviceWorker?.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});

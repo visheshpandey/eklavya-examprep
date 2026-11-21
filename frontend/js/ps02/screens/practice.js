@@ -4,7 +4,7 @@ import { h } from '../dom.js';
 import { createDictation } from '../../lib/dictation.js';
 import { getLang, getStudent, setLang } from '../state.js';
 import { errorCard, loading, skeleton } from '../ui.js';
-import { animateBars, deltaList } from './deltas.js';
+import { deltaList } from './deltas.js';
 import { mountDialogue } from './dialogue.js';
 
 const LANGS = [['hinglish', 'Hinglish'], ['english', 'English'], ['hindi', 'हिन्दी']];
@@ -103,7 +103,6 @@ export async function practice(root, ctx) {
         feedback.replaceChildren(
           h('div', { class: `result ${a.correct ? 'result-ok' : 'result-bad'}`, role: 'status' }, h('b', null, a.correct ? 'Correct!' : 'Not quite.'), ' ', a.explanation),
           deltas);
-        animateBars(deltas, a.mastery_changes);
         if (a.needs_reasoning) reasoning(a, feedback); else finishRow(feedback);
       } catch (err) {
         submit.disabled = false; submit.textContent = 'Check answer'; options.forEach((o) => { o.disabled = false; }); stage.dataset.locked = '';
@@ -152,8 +151,10 @@ export async function practice(root, ctx) {
         const talk = Boolean(r.misconception) && !r.diagnosis.is_careless_error;   // a known misconception: talk it through instead of just correcting
         const card = misconceptionCard(r, text.value.trim(), talk);
         panel.replaceChildren(card);
-        const finalDeltas = deltaList(r.mastery_changes, { title: 'Your mastery, updated with your explanation' });
-        panel.after(finalDeltas); animateBars(finalDeltas, r.mastery_changes);
+        const shown = box.querySelector('.deltas');   // update the SAME card in place: current -> new, no second card and no jump back
+        let finalDeltas = shown;
+        if (shown) shown.update(r.mastery_changes, 'Your mastery, updated with your explanation');
+        else { finalDeltas = deltaList(r.mastery_changes, { title: 'Your mastery, updated with your explanation' }); panel.after(finalDeltas); }
         if (!talk) { finishRow(box); return; }
         const done = () => { card.reveal(); finishRow(box); };
         finalDeltas.after(mountDialogue({ student, attemptId: a.attempt_id, onDone: done, onUnavailable: done }));
@@ -173,7 +174,7 @@ export async function practice(root, ctx) {
         card.replaceChildren(h('p', { class: 'eyebrow' }, 'Looks like a slip'), h('h2', null, 'Your thinking was right'),
           h('p', null, feedback), h('p', { class: 'muted small' }, 'We treated this as a small slip, so your mastery drops only a little.'));
       } else if (r.misconception) {
-        card.replaceChildren(h('p', { class: 'eyebrow' }, `Misconception spotted · ${Math.round(d.confidence * 100)}% sure`), h('h2', null, r.misconception.label),
+        card.replaceChildren(h('p', { class: 'eyebrow' }, `Misconception spotted · Confidence: ${d.confidence_label || (d.confidence >= 0.75 ? 'High' : d.confidence >= 0.5 ? 'Medium' : 'Low')}`), h('h2', null, r.misconception.label),
           h('blockquote', { class: 'quote' }, h('small', null, 'You said'), `“${evidence}”`),
           revealed ? [h('p', null, feedback), h('div', { class: 'fix' }, h('b', null, 'The fix: '), r.misconception.correction),
             r.misconception.analogy && h('p', { class: 'analogy' }, h('b', null, 'Think of it like this: '), r.misconception.analogy)]

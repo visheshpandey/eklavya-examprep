@@ -101,11 +101,8 @@ _TIME_FIELDS = {"mastery": ("last_seen", "updated_at"), "attempts": ("created_at
 
 
 def _wipe_demo() -> None:
-    for sid in [r["id"] for r in db.query("SELECT id FROM students WHERE is_demo=1")]:
-        for table in ("mastery", "attempts", "reviews", "student_misconceptions"):
-            db.execute(f"DELETE FROM {table} WHERE student_id=?", (sid,))
-        db.execute("DELETE FROM students WHERE id=?", (sid,))
-    db.execute("DELETE FROM ps02_cache WHERE cache_key LIKE 'reteach:%'")
+    from app.ps02 import reseed
+    reseed.delete_students([r["id"] for r in db.query("SELECT id FROM students WHERE is_demo=1")])
 
 
 def simulate() -> list[int]:
@@ -179,7 +176,7 @@ def ensure_seeded() -> None:
         reseed()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":   # kept for old habits: use  python -m app.ps02.reseed --regenerate
     db.init_db()
     export_fixture()
     print(f"wrote {FIXTURE}")

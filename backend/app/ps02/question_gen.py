@@ -98,7 +98,7 @@ def generate(concept_id: str, difficulty: int, active_mcs: list[str] | None = No
         try:
             raw = llm.hedged_json(SYSTEM, prompt, ("stem", "options", "correct_index"), 0.8 if attempt == 1 else 0.4, deadline_s=GEN_DEADLINE_S, hedge_after_s=5.0)
             q = GeneratedQuestion(**raw)
-            q.concept_id, q.difficulty = concept_id, max(1, min(3, int(q.difficulty or difficulty)))
+            q.concept_id, q.difficulty = concept_id, difficulty   # never trust the model's own difficulty label: the planner decided it
             if q.stem.strip() in seen:
                 continue
             out = _shuffle(q)
