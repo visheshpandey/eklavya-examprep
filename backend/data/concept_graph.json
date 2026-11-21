@@ -1,0 +1,27 @@
+{
+  "syllabus": "CBSE Class 10 Physics (rationalised)",
+  "chapters": ["Light", "Human Eye", "Electricity", "Magnetism"],
+  "concepts": [
+    {"id": "L1", "name": "Laws of reflection", "chapter": "Light", "prerequisites": [], "description": "Angle of incidence equals angle of reflection, and the incident ray, reflected ray and normal lie in one plane.", "key_formulas": ["∠i = ∠r"]},
+    {"id": "L2", "name": "Spherical mirrors & image formation", "chapter": "Light", "prerequisites": ["L1"], "description": "Concave and convex mirrors form real or virtual images depending on the object position.", "key_formulas": ["f = R/2"]},
+    {"id": "L3", "name": "Mirror formula, sign convention & magnification", "chapter": "Light", "prerequisites": ["L2"], "description": "Use the Cartesian sign convention with 1/v + 1/u = 1/f and m = -v/u.", "key_formulas": ["1/v + 1/u = 1/f", "m = -v/u = h'/h"]},
+    {"id": "L4", "name": "Refraction & refractive index", "chapter": "Light", "prerequisites": ["L1"], "description": "Light bends when its speed changes between media; n = c/v.", "key_formulas": ["n = c/v", "n = sin i / sin r"]},
+    {"id": "L5", "name": "Lenses & image formation", "chapter": "Light", "prerequisites": ["L4"], "description": "Convex and concave lenses converge or diverge light to form images.", "key_formulas": []},
+    {"id": "L6", "name": "Lens formula & power of a lens", "chapter": "Light", "prerequisites": ["L5", "L3"], "description": "1/v - 1/u = 1/f and power P = 1/f (f in metres), measured in dioptres.", "key_formulas": ["1/v - 1/u = 1/f", "P = 1/f", "m = v/u"]},
+    {"id": "E1", "name": "Human eye & accommodation", "chapter": "Human Eye", "prerequisites": ["L5"], "description": "The eye lens changes its focal length to focus near and far objects on the retina.", "key_formulas": []},
+    {"id": "E2", "name": "Defects of vision & correction", "chapter": "Human Eye", "prerequisites": ["E1", "L6"], "description": "Myopia, hypermetropia and presbyopia are corrected with suitable lenses.", "key_formulas": ["P = 1/f"]},
+    {"id": "E3", "name": "Refraction through prism & dispersion", "chapter": "Human Eye", "prerequisites": ["L4"], "description": "A prism splits white light into its component colours because each colour bends by a different amount.", "key_formulas": []},
+    {"id": "E4", "name": "Atmospheric refraction & scattering", "chapter": "Human Eye", "prerequisites": ["L4", "E3"], "description": "Twinkling, advanced sunrise, the blue sky and red sunsets come from refraction and scattering in the atmosphere.", "key_formulas": []},
+    {"id": "C1", "name": "Electric charge & current", "chapter": "Electricity", "prerequisites": [], "description": "Current is the rate of flow of charge through a conductor.", "key_formulas": ["I = Q/t"]},
+    {"id": "C2", "name": "Potential difference", "chapter": "Electricity", "prerequisites": ["C1"], "description": "Potential difference is the work done per unit charge in moving it between two points.", "key_formulas": ["V = W/Q"]},
+    {"id": "C3", "name": "Ohm's law & resistance", "chapter": "Electricity", "prerequisites": ["C1", "C2"], "description": "At constant temperature, current through a conductor is proportional to the potential difference across it.", "key_formulas": ["V = IR"]},
+    {"id": "C4", "name": "Factors affecting resistance (resistivity)", "chapter": "Electricity", "prerequisites": ["C3"], "description": "Resistance grows with length, falls with cross-section area and depends on the material.", "key_formulas": ["R = ρl/A"]},
+    {"id": "C5", "name": "Resistors in series", "chapter": "Electricity", "prerequisites": ["C3"], "description": "Same current through each resistor; voltages add; total resistance is the sum.", "key_formulas": ["Rs = R1 + R2 + R3"]},
+    {"id": "C6", "name": "Resistors in parallel", "chapter": "Electricity", "prerequisites": ["C3", "C5"], "description": "Same voltage across each branch; currents add; total resistance is less than the smallest branch.", "key_formulas": ["1/Rp = 1/R1 + 1/R2 + 1/R3"]},
+    {"id": "C7", "name": "Heating effect & electric power", "chapter": "Electricity", "prerequisites": ["C3"], "description": "Electrical energy turns into heat in a resistor; power is the rate of energy use.", "key_formulas": ["H = I²Rt", "P = VI = I²R = V²/R"]},
+    {"id": "M1", "name": "Magnetic field & field lines", "chapter": "Magnetism", "prerequisites": [], "description": "Field lines show the direction and strength of a magnetic field; they never cross.", "key_formulas": []},
+    {"id": "M2", "name": "Magnetic field due to current (wire, loop, solenoid)", "chapter": "Magnetism", "prerequisites": ["M1", "C1"], "description": "A current-carrying conductor produces a magnetic field around it (Oersted); a solenoid behaves like a bar magnet.", "key_formulas": []},
+    {"id": "M3", "name": "Force on current-carrying conductor (Fleming's LHR)", "chapter": "Magnetism", "prerequisites": ["M2"], "description": "The force is perpendicular to both the current and the magnetic field; Fleming's left-hand rule gives its direction.", "key_formulas": ["F = BIL sinθ"]},
+    {"id": "M4", "name": "Domestic electric circuits & safety", "chapter": "Magnetism", "prerequisites": ["C7"], "description": "Live, neutral and earth wires; fuses and earthing protect from overload and shocks.", "key_formulas": []}
+  ]
+}
