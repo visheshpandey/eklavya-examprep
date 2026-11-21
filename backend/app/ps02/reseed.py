@@ -10,7 +10,7 @@ import argparse
 
 from app import db
 
-LEARNER_TABLES = ("mastery", "attempts", "reviews", "student_misconceptions", "dialogues", "assignment_students")
+LEARNER_TABLES = ("mastery", "attempts", "reviews", "student_misconceptions", "dialogues", "assignment_students", "misconception_checks")
 
 
 def delete_students(ids: list[int]) -> int:

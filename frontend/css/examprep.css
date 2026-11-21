@@ -488,3 +488,24 @@ body.tour-on .ask-fab, body.tour-on .ask-panel { display: none !important; }
 .tour-exit { position: fixed; top: 12px; right: 12px; z-index: 92; pointer-events: auto; min-height: 38px; padding: 0 var(--s-4); border: 0; border-radius: var(--r-pill); background: var(--ink); color: var(--bg); font-weight: 700; box-shadow: var(--shadow); }
 .tour-sheet { left: 0; right: 0; bottom: 0; top: auto; width: 100%; max-height: 46vh; overflow: auto; border-radius: 16px 16px 0 0; border-width: 2px 0 0; }
 @media (max-width: 640px) { .tour-nav { order: 2; } }
+
+
+/* ---- Verified fixed: Detected -> Resolved -> Verified ---- */
+.mc-chain { list-style: none; margin: var(--s-2) 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; font-size: var(--text-xs); }
+.mc-chain li { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.mc-chain li + li::before { content: '→'; margin-right: 2px; color: var(--line-strong); }
+.mc-chain .chain-dot { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; border: 1.5px solid var(--line-strong); font-size: 10px; }
+.mc-chain li.done { color: var(--ok-text); }
+.mc-chain li.done .chain-dot, .stage-verified li.current .chain-dot { background: var(--ok-text); border-color: var(--ok-text); color: var(--paper); }
+.mc-chain li.current { color: var(--ink); font-weight: 600; }
+.mc-chain li.current .chain-dot { border-color: var(--accent-fill); }
+.stage-verified li.current { color: var(--ok-text); }
+.mc-status { display: grid; gap: 2px; margin-bottom: var(--s-3); }
+.verified-badge { font-weight: 600; }
+.stage-chip-detected { background: var(--bad-soft, #fdecea); color: var(--bad-text); border-color: transparent; }
+.stage-chip-resolved { background: var(--warn-soft, #fff4d6); color: var(--warn-text, #7a5a00); border-color: transparent; }
+.stage-chip-verified { background: var(--ok-soft); color: var(--ok-text); border-color: transparent; }
+.verify-result { display: grid; gap: var(--s-2); padding: var(--s-4); border-radius: var(--r-control); border: 1.5px solid var(--line-strong); margin-top: var(--s-3); }
+.verify-ok { border-color: var(--ok-text); background: var(--ok-soft); }
+.verify-bad { border-color: var(--bad-text); }
+.checks-card .review-list { margin-top: var(--s-2); }

@@ -4,7 +4,7 @@
 import { api } from './api.js';
 import { API_BASE } from '../lib/config.js';
 import { h } from './dom.js';
-import { setLang, setStudent } from './state.js';
+import { getStudent, setLang, setStudent } from './state.js';
 import { toast } from './ui.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -91,8 +91,9 @@ const STEPS = [
     target: () => $('.dialogue'),
     text: () => ($('.dialogue .dlg-won') ? 'Eklavya never gave the answer: it asked guiding questions in Hinglish (and spoke them aloud), and the misconception counts as fixed only when Aarav explained the correct idea himself. His mastery jumped, capped so one conversation can’t over-credit.'
       : 'Eklavya asks guiding questions and never hands over the answer. The misconception counts as fixed only when the student explains the idea in their own words; after four turns it explains and schedules an early review.') },
-  { id: 'reviews', title: 'Spaced repetition', route: '#/reviews', async before() { await api('/api/demo/time-travel', { method: 'POST', body: { on: true } }); }, wait: 'h1', target: () => $('.review-list') || $('h1'),
-    text: 'Every concept comes back just before it would be forgotten (SM-2). For the demo, time travel makes one day equal one minute, so reviews fall due while you watch. Resolved misconceptions will return later as a short check.' },
+  { id: 'reviews', title: 'Reviews + 🔒 Verified fixed', route: '#/reviews', async before() { await api('/api/demo/time-travel', { method: 'POST', body: { on: true } }); const s = getStudent(); if (s) await api(`/api/demo/checks-due?student_id=${s.id}`, { method: 'POST' }).catch(() => {}); }, wait: 'h1', target: () => $('.checks-card') || $('.review-list') || $('h1'),
+    text: () => ($('.checks-card') ? '🔒 Verified fixed: once Aarav explained the idea, Eklavya scheduled a trap question for later (two days normally; for the demo time travel makes it minutes). Avoid the trap and the misconception becomes Verified; fall for it and it reopens with a fresh conversation. Concepts also return on an SM-2 schedule.'
+      : 'Every concept comes back just before it would be forgotten (SM-2). For the demo, time travel makes one day equal one minute, so reviews fall due while you watch.') },
   { id: 'board', title: '🎯 Board-exam marks', route: '#/map', available: (student) => exists(`/api/ps02/board?student_id=${student.id}`),
     wait: '.marks-card', target: () => $('.marks-card'), text: 'Mastery is turned into marks: a predicted CBSE Physics score, and the fix that unlocks the most marks first.' },
   { id: 'teacher', title: 'The teacher’s co-pilot', route: '#/teacher', wait: '.group-card', waitMs: 25000, target: () => $('.group-card'),

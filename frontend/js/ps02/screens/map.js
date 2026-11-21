@@ -5,6 +5,7 @@ import { h, s } from '../dom.js';
 import { getLang, getStudent } from '../state.js';
 import { countUp, level, loading, masteryColors, pct, sparkline } from '../ui.js';
 import { assignmentBanner } from './assignment-banner.js';
+import { chain, verifiedBadge } from './chain.js';
 import { diffSnap, readSnap, writeSnap } from '../snapshot.js';
 
 const CHAPTERS = ['Light', 'Human Eye', 'Electricity', 'Magnetism'];
@@ -132,6 +133,8 @@ export async function mapScreen(root, ctx) {
           h('b', null, m.label), h('p', { class: 'small' }, m.description),
           m.quote && h('blockquote', { class: 'quote' }, `“${m.quote}”`), h('p', { class: 'small ok-text' }, m.correction))))
         : h('p', { class: 'muted small' }, 'No active misconceptions on this concept.'),
+      (n.misconception_chain || []).length > 0 && h('div', null, h('h3', null, 'Misconception status'),
+        n.misconception_chain.map((m) => h('div', { class: 'mc-status' }, h('b', { class: 'small' }, m.label), chain(m.stage), m.stage === 'verified' && verifiedBadge()))),
       h('div', null, h('h3', null, `Doubts asked (${n.doubts_count || 0})`),
         n.doubts_count ? n.recent_doubts.map((d) => h('p', { class: 'small doubt-row' }, `“${d.question}”`, d.misconception_id && h('span', { class: 'chip chip-bad' }, 'misconception')))
           : h('p', { class: 'muted small' }, 'No doubts asked about this concept yet.'),

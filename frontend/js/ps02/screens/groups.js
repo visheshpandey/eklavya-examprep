@@ -3,6 +3,7 @@ import { api, qs } from '../api.js';
 import { h } from '../dom.js';
 import { setStudent } from '../state.js';
 import { errorCard, skeleton, toast } from '../ui.js';
+import { stageChip } from './chain.js';
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -28,8 +29,9 @@ function statusView(a) {
     h('div', { class: 'before-after', 'aria-label': `Before: ${a.before} held it. Now: ${a.after} still hold it.` },
       h('span', { class: 'ba before' }, h('b', null, a.before), h('small', null, 'held it')), h('span', { class: 'ba-arrow', 'aria-hidden': 'true' }, '→'),
       h('span', { class: `ba after ${cleared ? 'cleared' : ''}` }, h('b', null, a.after), h('small', null, cleared ? 'still hold it: cleared!' : 'still hold it'))),
+    a.verified > 0 && h('p', { class: 'small ok-text' }, `✅ ${a.verified} of ${a.assigned} verified fixed by a trap question`),
     h('div', { class: 'chips' }, a.students.map((s) => h('span', { class: `chip ${s.outcome === 'resolved' ? 'chip-ok' : s.status === 'done' ? 'chip-warn' : ''}` },
-      `${s.name}: ${s.outcome === 'resolved' ? '✓ explained it' : s.status === 'done' ? 'tried, still unsure' : 'not started'}`))));
+      `${s.name}: ${s.outcome === 'resolved' ? '✓ explained it' : s.status === 'done' ? 'tried, still unsure' : 'not started'}`), stageChip(s.stage))));
 }
 
 function groupCard(g, reload) {

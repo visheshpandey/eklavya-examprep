@@ -11,11 +11,12 @@ import { reviews } from './screens/reviews.js';
 import { teacher } from './screens/teacher.js';
 import { how } from './screens/how.js';
 import { notes } from './screens/notes.js';
+import { verify } from './screens/verify.js';
 import { mountAskWidget } from './ask-widget.js';
 import { startTour } from './tour.js';
 
-const ROUTES = { '': landing, diagnostic, map: mapScreen, practice, reviews, teacher, student: mapScreen, how, notes };
-const NEEDS_STUDENT = new Set(['diagnostic', 'map', 'practice', 'reviews', 'notes']);
+const ROUTES = { '': landing, diagnostic, map: mapScreen, practice, reviews, teacher, student: mapScreen, how, notes, verify };
+const NEEDS_STUDENT = new Set(['diagnostic', 'map', 'practice', 'reviews', 'notes', 'verify']);
 const app = document.getElementById('app');
 let renderId = 0;
 

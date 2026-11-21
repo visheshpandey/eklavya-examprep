@@ -245,7 +245,7 @@ def reset_tour_students() -> dict:
     with db.get_conn() as c:
         for name in TOUR_STUDENTS:
             sid, fid = live[name], by_name[name]
-            for table in ("mastery", "attempts", "reviews", "student_misconceptions", "dialogues", "assignment_students", "doubts"):
+            for table in ("mastery", "attempts", "reviews", "student_misconceptions", "dialogues", "assignment_students", "doubts", "misconception_checks"):
                 c.execute(f"DELETE FROM {table} WHERE student_id=?", (sid,))
             for table in ("mastery", "attempts", "reviews", "student_misconceptions"):
                 for row in dump[table]:

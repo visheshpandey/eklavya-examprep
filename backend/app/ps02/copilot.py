@@ -46,9 +46,13 @@ def _assignment_state(class_section: str, mc_id: str) -> dict | None:
     rows = db.query("SELECT a.student_id, a.status, a.outcome, s.name FROM assignment_students a JOIN students s ON s.id = a.student_id WHERE a.assignment_id=?", (a["id"],))
     ids = [r["student_id"] for r in rows]
     still = {h["student_id"] for h in _holders(ids).get(mc_id, [])}
+    from app.ps02 import traps
+    stages = {r["student_id"]: traps.stage_of(r) for r in db.query("SELECT * FROM student_misconceptions WHERE misconception_id=?", (mc_id,)) if r["student_id"] in ids}
     return {"id": a["id"], "created_at": a["created_at"], "concept_id": a["concept_id"], "assigned": len(rows), "done": sum(1 for r in rows if r["status"] == "done"),
             "resolved": sum(1 for r in rows if r["outcome"] == "resolved"), "before": len(rows), "after": len(still),
-            "students": [{"student_id": r["student_id"], "name": r["name"], "status": r["status"], "outcome": r["outcome"], "still_holds": r["student_id"] in still} for r in rows]}
+            "verified": sum(1 for s in stages.values() if s == "verified"),
+            "students": [{"student_id": r["student_id"], "name": r["name"], "status": r["status"], "outcome": r["outcome"], "still_holds": r["student_id"] in still,
+                          "stage": stages.get(r["student_id"], "detected")} for r in rows]}
 
 
 def groups(class_section: str | None = None) -> dict:

@@ -292,10 +292,14 @@ def mastery_view(student_id: int) -> dict:
     doubts_by: dict[str, list[dict]] = {}
     for d in db.query("SELECT concept_id, question, misconception_id FROM doubts WHERE student_id=? AND concept_id IS NOT NULL ORDER BY id DESC", (student_id,)):
         doubts_by.setdefault(d["concept_id"], []).append(d)
+    from app.ps02 import traps
+    history_rows = [r for r in db.query("SELECT * FROM student_misconceptions WHERE student_id=? AND count>0", (student_id,)) if r["misconception_id"] in content.misconceptions()]
     nodes = []
     for cid, c in graph.items():
         mcs = [m for m in actives if cid in content.misconceptions()[m["id"]]["concept_ids"]]
-        nodes.append({**c, **details[cid], "misconceptions": mcs, "review_due": cid in due,
+        chain = [{"id": r["misconception_id"], "label": content.misconceptions()[r["misconception_id"]]["label"], "stage": traps.stage_of(r), "verified_at": r.get("verified_at")}
+                 for r in history_rows if cid in content.misconceptions()[r["misconception_id"]]["concept_ids"]]
+        nodes.append({**c, **details[cid], "misconceptions": mcs, "misconception_chain": chain, "review_due": cid in due,
                       "doubts_count": len(doubts_by.get(cid, [])), "recent_doubts": doubts_by.get(cid, [])[:3]})
     return {"nodes": nodes, "edges": [{"from": p, "to": c["id"]} for c in graph.values() for p in c["prerequisites"]], "chapters": list({c["chapter"] for c in graph.values()}),
             "weakest": lm.frontier_weakest({k: v["p_known"] for k, v in details.items()}, 3), "time_travel": srs.time_travel()}

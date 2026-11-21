@@ -15,7 +15,7 @@ from pydantic import BaseModel, ValidationError, field_validator
 
 from app import db
 from app.ai import gemini
-from app.ps02 import content, copilot, learner_model as lm, llm, llm_stream, srs
+from app.ps02 import content, copilot, learner_model as lm, llm, llm_stream, srs, traps
 
 log = logging.getLogger(__name__)
 MAX_TURNS = 4
@@ -178,7 +178,8 @@ def _resolve(student_id: int, row: dict) -> list[dict]:
         deltas.append({"concept_id": cid, "name": graph[cid]["name"], "before": round(before, 4), "after": mastery[cid],
                        "reason": "explained the idea in their own words" if i == 0 else "prerequisite effect (misconception resolved)"})
     lm.save_mastery(student_id, {d["concept_id"]: d["after"] for d in deltas})
-    db.execute("UPDATE student_misconceptions SET resolved=1 WHERE student_id=? AND misconception_id=?", (student_id, row["misconception_id"]))
+    db.execute("UPDATE student_misconceptions SET resolved=1, verified=0, verified_at=NULL WHERE student_id=? AND misconception_id=?", (student_id, row["misconception_id"]))
+    traps.schedule(student_id, row["misconception_id"], row["concept_id"])      # Resolved -> a check later will make it Verified
     return deltas
 
 

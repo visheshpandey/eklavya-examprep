@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.ps02 import content, copilot, learner_model as lm, rootcause, seed, service, socratic, srs, teacher
+from app.ps02 import content, copilot, learner_model as lm, rootcause, seed, service, socratic, srs, teacher, traps
 
 router = APIRouter()
 
@@ -73,6 +73,12 @@ class AssignIn(BaseModel):
     class_section: str | None = None
     misconception_id: str
     student_ids: list[int] | None = None
+
+
+class CheckAnswerIn(BaseModel):
+    student_id: int
+    question_id: str
+    chosen_index: int = Field(ge=0, le=3)
 
 
 class TimeTravelIn(BaseModel):
@@ -273,6 +279,42 @@ def demo_seed():
 def demo_tour_reset():
     """Start of the Judge tour: restore the demo student (and his classmate) to the known story, in place. Other students and visitors are untouched."""
     return {"student": seed.reset_tour_students()}
+
+
+@router.get("/api/ps02/checks")
+def checks(student_id: int):
+    """Verification checks for the Reviews screen: due, upcoming, and misconceptions already verified fixed."""
+    _student(student_id)
+    return traps.checks(student_id)
+
+
+@router.get("/api/ps02/checks/next")
+def check_next(student_id: int, misconception_id: str):
+    """The trap question for a due check."""
+    _student(student_id)
+    try:
+        return traps.next_trap(student_id, misconception_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc).strip("'").capitalize())
+    except ValueError as exc:
+        raise HTTPException(409, str(exc).capitalize())
+
+
+@router.post("/api/ps02/checks/answer")
+def check_answer(body: CheckAnswerIn):
+    _student(body.student_id)
+    try:
+        return traps.answer(body.student_id, body.question_id, body.chosen_index)
+    except KeyError:
+        raise HTTPException(404, "Check not found. Please open it again from Reviews.")
+
+
+@router.post("/api/demo/checks-due")
+def demo_checks_due(student_id: int):
+    """Demo helper (Judge tour): make the student's pending verification checks due right now."""
+    _student(student_id)
+    traps.force_due(student_id)
+    return {"ok": True}
 
 
 @router.get("/api/demo/time-travel")

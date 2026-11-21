@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS assignments (
 CREATE TABLE IF NOT EXISTS assignment_students (
     assignment_id INTEGER, student_id INTEGER, status TEXT DEFAULT 'pending', outcome TEXT, done_at TEXT, PRIMARY KEY (assignment_id, student_id)
 );
+CREATE TABLE IF NOT EXISTS misconception_checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER, misconception_id TEXT, concept_id TEXT, scheduled_at TEXT, interval_days REAL, status TEXT DEFAULT 'pending',
+    attempts INTEGER DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS ps02_cache (
     cache_key TEXT PRIMARY KEY, payload TEXT, created_at REAL
 );
