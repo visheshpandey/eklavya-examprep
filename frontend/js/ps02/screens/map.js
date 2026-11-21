@@ -5,6 +5,7 @@ import { h, s } from '../dom.js';
 import { getLang, getStudent } from '../state.js';
 import { countUp, level, loading, masteryColors, pct, sparkline } from '../ui.js';
 import { assignmentBanner } from './assignment-banner.js';
+import { diffSnap, readSnap, writeSnap } from '../snapshot.js';
 
 const CHAPTERS = ['Light', 'Human Eye', 'Electricity', 'Magnetism'];
 const NODE_W = 112, NODE_H = 58, SLOT = 128, CHAPTER_GAP = 30, ROW_H = 92, PAD = 14;
@@ -49,9 +50,11 @@ export async function mapScreen(root, ctx) {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const reveal = ctx.query.reveal === '1';
   const lay = layout(nodes);
+  const changed = new Map((teacherView || reveal ? [] : diffSnap(readSnap(studentId), nodes)).map((c) => [c.id, c]));   // moved since you last looked
   const panel = h('aside', { class: 'card detail', 'aria-live': 'polite' }, h('p', { class: 'muted' }, 'Tap any concept to see its mastery, prerequisites, history and misconceptions.'));
   let selected = null;
   const nodeEls = new Map();
+  let changedOrder = 0;
 
   // ---------- SVG graph
   const svg = s('svg', { class: 'graph', viewBox: `0 0 ${lay.width} ${lay.height}`, role: 'group', 'aria-label': 'Concept graph. Each box is a concept; lines run from a prerequisite to the concept that needs it.' });
@@ -69,10 +72,13 @@ export async function mapScreen(root, ctx) {
   svg.prepend(s('defs', null, s('marker', { id: 'arrow', viewBox: '0 0 8 8', refX: '7', refY: '4', markerWidth: '7', markerHeight: '7', orient: 'auto' }, s('path', { d: 'M0,0 L8,4 L0,8 z', class: 'arrow' }))));
   nodes.forEach((n, i) => {
     const p = lay.pos[n.id], c = masteryColors(n.p_known);
-    const pctText = s('text', { class: 'node-pct', x: NODE_W / 2, y: 20, 'text-anchor': 'middle', fill: c.ink }, reveal ? '0%' : pct(n.p_known));
+    const ch = changed.get(n.id), old = ch && masteryColors(ch.before);
+    const pctText = s('text', { class: 'node-pct', x: NODE_W / 2, y: 20, 'text-anchor': 'middle', fill: c.ink }, reveal ? '0%' : pct(ch ? ch.before : n.p_known));
     const label = wrap(n.short || n.name);
     const g = s('g', { class: `node ${reveal ? 'node-reveal' : ''}`, transform: `translate(${p.x},${p.y})`, tabindex: '0', role: 'button', 'aria-label': `${n.name}: ${pct(n.p_known)} mastery, ${level(n.p_known)}`, style: reveal ? { animationDelay: `${i * 55}ms` } : null },
-      s('rect', { width: NODE_W, height: NODE_H, rx: '9', fill: c.bg, stroke: c.border, 'stroke-width': '1.6' }),
+      s('rect', { class: 'node-body', width: NODE_W, height: NODE_H, rx: '9', fill: ch ? old.bg : c.bg, stroke: ch ? old.border : c.border, 'stroke-width': '1.6' }),
+      ch && s('rect', { class: 'node-pulse', width: NODE_W, height: NODE_H, rx: '9', fill: 'none' }),
+      ch && s('text', { class: `node-delta ${ch.after > ch.before ? 'up' : 'down'}`, x: NODE_W - 6, y: -4, 'text-anchor': 'end' }, `${ch.after > ch.before ? '+' : '−'}${Math.round(Math.abs(ch.after - ch.before) * 100)}`),
       s('text', { class: 'node-id', x: 8, y: 14, fill: c.ink }, n.id), pctText,
       ...label.map((l, k) => s('text', { class: 'node-name', x: NODE_W / 2, y: 36 + k * 12, 'text-anchor': 'middle', fill: c.ink }, l)),
       n.review_due && s('circle', { cx: NODE_W - 8, cy: 8, r: '5', class: 'dot-due' }, s('title', null, 'Review due')),
@@ -81,6 +87,15 @@ export async function mapScreen(root, ctx) {
     g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(n.id); } });
     nodeEls.set(n.id, g); svg.append(g);
     if (reveal) setTimeout(() => ctx.live() && countUp(pctText, 0, n.p_known * 100), i * 55 + 150);
+    if (ch) {   // glide from the old colour and number to the new ones
+      setTimeout(() => {
+        if (!ctx.live()) return;
+        const body = g.querySelector('.node-body');
+        body.setAttribute('fill', c.bg); body.setAttribute('stroke', c.border);
+        pctText.setAttribute('fill', c.ink); countUp(pctText, ch.before * 100, ch.after * 100, undefined, 900);
+        g.querySelectorAll('text:not(.node-delta)').forEach((t) => t.setAttribute('fill', c.ink));
+      }, 450 + changedOrder++ * 140);
+    }
   });
 
   // ---------- phone list
@@ -186,6 +201,7 @@ export async function mapScreen(root, ctx) {
     assignBox,
     rcBox,
     h('div', { class: 'map-grid' }, h('div', { class: 'card graph-card' }, svg, list), panel));
+  if (!teacherView) writeSnap(studentId, nodes);   // the next visit animates only what changes after this one
   if (reveal) history.replaceState(null, '', '#/map');
   loadStruggles();
   if (!teacherView) api(`/api/practice/prefetch?${qs({ student_id: studentId })}`, { method: 'POST', timeout: 20000 }).catch(() => {});   // warm the first practice question

@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { h } from '../dom.js';
 import { clearStudent, getStudent, setStudent } from '../state.js';
 import { toast } from '../ui.js';
+import { heroDemo } from '../hero-demo.js';
 
 export async function landing(root) {
   const existing = getStudent();
@@ -32,7 +33,7 @@ export async function landing(root) {
   } }, 'Try demo student');
 
   root.replaceChildren(
-    h('section', { class: 'hero' },
+    h('div', { class: 'hero-wrap' }, h('section', { class: 'hero' },
       h('p', { class: 'eyebrow' }, 'CBSE Class 10 Physics · English, Hindi, Hinglish'),
       h('h1', { class: 'hero-title' }, 'Generic AI tutors answer questions. Eklavya knows what you don’t understand, and why.'),
       h('p', { class: 'hero-sub' }, 'Take a 14-question diagnostic, see your concept map, then practise on exactly what is weak. When you get one wrong, say why in your own words (by voice, if you like) and Eklavya names the misconception behind it.'),
@@ -42,7 +43,7 @@ export async function landing(root) {
         h('a', { class: 'btn', href: '#/teacher' }, 'Open teacher dashboard'),
         demoBtn),
       existing && h('p', { class: 'muted small' }, `Not ${existing.name}? `, h('button', { class: 'link-btn', type: 'button', onClick: () => { clearStudent(); location.hash = '#/'; location.reload(); } }, 'Use a different name')),
-      form, status),
+      form, status), heroDemo()),
     h('section', { class: 'pillars', 'aria-label': 'What is inside' },
       pillar('1', 'Diagnose', 'A hand-written diagnostic whose wrong options are built from real misconceptions.', '#/how'),
       pillar('2', 'Model', 'Per-concept mastery (Bayesian Knowledge Tracing) over a prerequisite graph, updated after every answer.', '#/how'),

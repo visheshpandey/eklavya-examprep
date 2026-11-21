@@ -11,20 +11,21 @@ const tokens = (text) => String(text).toLowerCase().replace(/[^\p{L}\p{N}\s.]/gu
 export function matchSpokenOption(transcript, options) {
   const said = tokens(transcript).filter((w) => !['option', 'answer', 'is', 'the', 'wala', 'hai', 'ka', 'ki', 'jawab', 'i', 'choose', 'pick', 'select'].includes(w));
   if (!said.length) return null;
-  if (said.length <= 3) {
-    const hits = ORDINALS.map((names, i) => (said.some((w) => names.includes(w)) ? i : -1)).filter((i) => i >= 0);
-    if (hits.length === 1) return hits[0];
-  }
-  // otherwise: best overlap with the option's own words (e.g. "twenty ohm" / "4 ohm")
+  // 1) the option's own words win: "0.6 A" is the 0.6 ampere option, not option A (the unit "A" is also a spoken letter)
   const scores = options.map((opt) => {
     const ow = new Set(tokens(opt));
     if (!ow.size) return 0;
     return said.filter((w) => ow.has(w)).length / Math.max(ow.size, said.length);
   });
   const best = Math.max(...scores);
-  if (best < 0.5) return null;
   const winners = scores.map((s, i) => (s === best ? i : -1)).filter((i) => i >= 0);
-  return winners.length === 1 ? winners[0] : null;
+  if (best >= 0.5 && winners.length === 1) return winners[0];
+  // 2) otherwise a spoken letter, ordinal or number, but only in a short utterance and only when exactly one is named
+  if (said.length <= 3) {
+    const hits = ORDINALS.map((names, i) => (said.some((w) => names.includes(w)) ? i : -1)).filter((i) => i >= 0);
+    if (hits.length === 1) return hits[0];
+  }
+  return null;
 }
 
 /** What to read aloud for a question: the stem, then "A: ..., B: ...". */
