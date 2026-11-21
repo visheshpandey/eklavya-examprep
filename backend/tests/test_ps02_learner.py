@@ -17,8 +17,9 @@ def test_correct_raises_wrong_lowers():
     post = 0.45 / 0.575
     assert math.isclose(lm.bkt_update(0.5, True), post + (1 - post) * 0.15)      # posterior, then the learning transition
     assert math.isclose(lm.bkt_update(0.5, False), 0.05 / 0.425)                 # a miss: posterior only, no learning
-    for p in (0.05, 0.15, 0.4, 0.8):
+    for p in (0.15, 0.4, 0.8):
         assert lm.bkt_update(p, False) < p                                      # a wrong answer never raises mastery
+    assert lm.bkt_update(0.05, False) == 0.05                                    # ...and mastery has a 5% floor
         assert lm.bkt_update(p, False, weight=lm.WRONG_WEIGHT) < p
 
 
