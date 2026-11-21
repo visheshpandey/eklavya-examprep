@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+backend/.env
+.venv/
+env/
+venv/
+/bin/
+/lib/
+backend/lib/
+/include/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+backend/data/*.db
+
+# Eklavya Exam Prep
+backend/.env
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+build/
+.next/
+.vercel/
+.pytest_cache/

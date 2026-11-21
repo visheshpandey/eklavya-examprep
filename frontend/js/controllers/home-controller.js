@@ -1,0 +1,105 @@
+// Data for the Today screen, the exam planner, the concept map, flashcards and past results.
+// Like the notes controller: talks to the backend, dispatches what came back, reports failures through the notifier.
+import { actions } from '../state/actions.js';
+import { t } from '../lib/strings.js';
+import { masteryHistory } from '../lib/mastery-history.js';
+
+/**
+ * @param {object} deps
+ * @param {*} deps.store
+ * @param {typeof import('../services/api-client.js').backend} deps.backend
+ * @param {ReturnType<typeof import('./notifier.js').createNotifier>} deps.notifier
+ * @param {number} deps.userId
+ */
+export function createHomeController({ store, backend, notifier, userId, onMastery = () => {} }) {
+  let celebrationId = 0;
+  const language = () => store.getState().ui.language;
+
+  async function guarded(task) {
+    try {
+      await task();
+      return true;
+    } catch (err) {
+      notifier.error(err);
+      return false;
+    }
+  }
+
+  /** A quiet refresh: background data that should not raise a banner every time the backend is briefly away. */
+  async function quietly(task) {
+    try { await task(); } catch { /* the screen keeps its last data */ }
+  }
+
+  async function loadToday() {
+    const before = store.getState().today?.streak ?? null;
+    const today = await backend.today(userId);
+    store.dispatch(actions.todayLoaded(today));
+    if (before !== null && today.streak > before && today.streak >= 2) {
+      store.dispatch(actions.celebrated({ id: ++celebrationId, text: t('celebrate.streak', language(), { n: today.streak }) }));
+    }
+  }
+
+  const loadPlan = async () => store.dispatch(actions.planLoaded(await backend.plan(userId)));
+  const loadMap = async () => store.dispatch(actions.conceptMapLoaded(await backend.conceptMap(userId)));
+  const loadHistory = async () => store.dispatch(actions.historyLoaded(await backend.history(userId)));
+  const loadMasteryHistory = async () => masteryHistory.set((await backend.masteryHistory(userId)).topics);
+
+  return {
+    /** Everything on the Today and Progress screens that depends on answers and notes. */
+    refresh: () => quietly(() => Promise.all([loadToday(), loadPlan(), loadMap(), loadHistory(), loadMasteryHistory()])),
+    refreshToday: () => quietly(loadToday),
+
+    savePlan: (examDate, minutesPerDay) => guarded(async () => {
+      store.dispatch(actions.planLoaded(await backend.savePlan(examDate, minutesPerDay, userId)));
+      await loadToday();
+    }),
+    clearPlan: () => guarded(async () => {
+      store.dispatch(actions.planLoaded(await backend.clearPlan(userId)));
+      await loadToday();
+    }),
+
+    loadFlashcards: (topicId) => quietly(async () => {
+      const { cards } = await backend.flashcards(topicId, userId);
+      store.dispatch(actions.flashcardsLoaded({ topicId, cards }));
+    }),
+    makeFlashcards: (topicId) => guarded(async () => {
+      const { cards } = await backend.makeFlashcards(topicId, userId);
+      store.dispatch(actions.flashcardsLoaded({ topicId, cards }));
+      await loadToday();   // new cards are due now: Today's "cards to review" count follows
+    }),
+    /** The cards due today across all topics (review mode). An empty list on failure, with the error shown. */
+    dueCards: async () => {
+      try { return (await backend.dueCards()).cards; } catch (err) { notifier.error(err); return []; }
+    },
+    /** Rate one card (Got it / Hard / Again). Returns the server's answer {box, due_on, due_count}, or null when it could not be saved. */
+    rateCard: async (cardId, knew, hard = false) => {
+      try {
+        const result = await backend.reviewCard(cardId, knew, hard);
+        const today = store.getState().today;
+        if (today) store.dispatch(actions.todayLoaded({ ...today, cards_due: result.due_count }));
+        if (result.mastery) {   // the rating is evidence: say what it did, and refresh every screen that shows mastery
+          const { topic, before, after, delta } = result.mastery;
+          notifier.toast(delta >= 0 ? 'ok' : 'bad', `${topic}: ${Math.round(before)}% \u2192 ${Math.round(after)}% ${delta >= 0 ? '\u2191' : '\u2193'}`);
+          document.dispatchEvent(new CustomEvent('eklavya:mastery', { detail: result.mastery }));
+          onMastery();
+        }
+        return result;
+      } catch (err) { notifier.error(err); return null; }
+    },
+    /** Every card the student has, for a practice round (a mock round does not change the schedule). */
+    allCards: async () => {
+      try { return (await backend.flashcards(null, userId)).cards; } catch (err) { notifier.error(err); return []; }
+    },
+    /** "Reset today's deck": every card is due again. */
+    resetDeck: () => guarded(async () => {
+      await backend.resetDeck();
+      await loadToday();
+    }),
+    /** Save one review answer; Today's "cards to review" count follows. */
+    reviewCard: (cardId, knew, hard = false) => quietly(async () => {
+      const result = await backend.reviewCard(cardId, knew, hard);
+      const today = store.getState().today;
+      if (today) store.dispatch(actions.todayLoaded({ ...today, cards_due: result.due_count }));
+    }),
+  };
+}

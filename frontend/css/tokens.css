@@ -1,0 +1,218 @@
+/* Design tokens. The only place colours, type, spacing and shape are defined.
+   The look is the paper-and-forest design in docs/design/new-frontend. Light is the default; dark follows the OS
+   (prefers-color-scheme) unless the viewer picked a theme with the toggle (<html data-theme="light|dark">).
+   Both dark blocks hold the same values: one for the OS setting, one for the toggle. This file is generated from one table
+   of values, so keep the two dark blocks identical when editing by hand. */
+:root {
+  color-scheme: light;
+  --bg: #f2efe7;
+  --surface: #faf8f2;
+  --surface-2: #eee9de;
+  --surface-3: #e3e0d3;
+  --ink: #24302d;
+  --ink-2: #3d4a46;
+  --ink-3: #3f4a44;
+  --line: #dcd7cc;
+  --line-strong: #c4beb0;
+  --accent-fill: #29483e;
+  --accent-fill-hover: #1f3a31;
+  --accent-text: #964834;
+  --accent-soft: #f0e2d9;
+  --on-accent: #f8f2e7;
+  --brand: #b9853f;
+  --brand-ink: #8a4a30;
+  --ok-text: #3f6b4c;
+  --ok-soft: #e3e9dc;
+  --warn-text: #7d5412;
+  --warn-soft: #f3e6c8;
+  --bad-text: #a8332a;
+  --bad-soft: #f0dcd6;
+  --speak: #e8a33d;
+  --on-speak: #2a1b05;
+  --paper: #faf8f2;
+  --dot: #dcd7cc;
+  --scrim: rgb(20 30 26 / .55);
+  --series-1: #29483e;
+  --series-2: #b8604a;
+  --series-3: #3d6f86;
+  --series-4: #b9853f;
+  --series-muted: #8a918a;
+  --map-1: #e3e9dc;
+  --map-2: #c5d3bf;
+  --map-3: #97b392;
+  --map-4: #5f8a69;
+  --map-5: #29483e;
+  --map-ink-strong: #f8f2e7;
+  --grid: #e4dfd3;
+  --axis: #c4beb0;
+  --shadow: 0 1px 2px rgb(44 42 34 / .06), 0 10px 26px -16px rgb(44 42 34 / .28);
+  --paper-hi: #faf8f2;
+  --rail: #f8f6f0;
+  --hero: #29483e;
+  --hero-ink: #f4f0e5;
+  --hero-mute: #b9c8bd;
+  --terracotta: #b8604a;
+  --ochre: #b9853f;
+  --ok-fill: #5f8a69;
+  --sage: #e3e9dc;
+  --clay-pale: #f0e2d9;
+  --blue-pale: #dfe8e7;
+  --mark: #f3dcb4;
+  --drop-shadow: rgb(44 42 34 / .14);
+
+  /* type: DM Sans for text, Instrument Serif for headlines, DM Mono for small labels (all bundled in /fonts);
+     Nirmala UI and Noto cover Devanagari. */
+  --font: "DM Sans", system-ui, -apple-system, "Segoe UI", "Nirmala UI", "Noto Sans Devanagari", Roboto, sans-serif;
+  --font-serif: "Instrument Serif", Georgia, "Nirmala UI", "Noto Serif Devanagari", serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+  --font-hand: "Kalam", "Noto Sans Devanagari", cursive;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-md: 1.0625rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --leading: 1.6;
+
+  /* space: 4px base */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2rem;
+  --s-7: 3rem;
+
+  /* shape: the design is crisp paper, small radii; pills only for status chips */
+  --r-control: 6px;
+  --r-panel: 4px;
+  --r-pill: 999px;
+
+  /* sizes */
+  --tap: 44px;
+  --topbar: 64px;
+  --rail-w: 250px;
+  --measure: 68ch;
+
+  /* layers */
+  --z-bar: 20;
+  --z-tabs: 30;
+  --z-toast: 40;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #151d1a;
+    --surface: #1c2722;
+    --surface-2: #22302a;
+    --surface-3: #2a3a33;
+    --ink: #e9e5d6;
+    --ink-2: #cdd0c2;
+    --ink-3: #9aa59c;
+    --line: #33423c;
+    --line-strong: #46574f;
+    --accent-fill: #9fd3bb;
+    --accent-fill-hover: #b4e0cc;
+    --accent-text: #e09a7f;
+    --accent-soft: #33281f;
+    --on-accent: #14201b;
+    --brand: #e2b571;
+    --brand-ink: #e09a7f;
+    --ok-text: #8cc49b;
+    --ok-soft: #22332d;
+    --warn-text: #e2b571;
+    --warn-soft: #3a2e18;
+    --bad-text: #f0a08a;
+    --bad-soft: #3a2420;
+    --speak: #e8a33d;
+    --on-speak: #2a1b05;
+    --paper: #1c2722;
+    --dot: #2a3a33;
+    --scrim: rgb(5 10 8 / .7);
+    --series-1: #9fd3bb;
+    --series-2: #e09a7f;
+    --series-3: #7fb4cc;
+    --series-4: #e2b571;
+    --series-muted: #7d8b86;
+    --map-1: #22332d;
+    --map-2: #2c4a3e;
+    --map-3: #3f7a63;
+    --map-4: #6fb08f;
+    --map-5: #b9e3cb;
+    --map-ink-strong: #14201b;
+    --grid: #2a3a33;
+    --axis: #46574f;
+    --shadow: 0 12px 30px -16px rgb(0 0 0 / .7);
+    --paper-hi: #1c2722;
+    --rail: #19231f;
+    --hero: #1e3832;
+    --hero-ink: #f1ecdc;
+    --hero-mute: #a7b9ae;
+    --terracotta: #e09a7f;
+    --ochre: #e2b571;
+    --ok-fill: #8cc49b;
+    --sage: #22332d;
+    --clay-pale: #33281f;
+    --blue-pale: #1f3030;
+    --mark: #5a4526;
+    --drop-shadow: rgb(0 0 0 / .4);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #151d1a;
+  --surface: #1c2722;
+  --surface-2: #22302a;
+  --surface-3: #2a3a33;
+  --ink: #e9e5d6;
+  --ink-2: #cdd0c2;
+  --ink-3: #9aa59c;
+  --line: #33423c;
+  --line-strong: #46574f;
+  --accent-fill: #9fd3bb;
+  --accent-fill-hover: #b4e0cc;
+  --accent-text: #e09a7f;
+  --accent-soft: #33281f;
+  --on-accent: #14201b;
+  --brand: #e2b571;
+  --brand-ink: #e09a7f;
+  --ok-text: #8cc49b;
+  --ok-soft: #22332d;
+  --warn-text: #e2b571;
+  --warn-soft: #3a2e18;
+  --bad-text: #f0a08a;
+  --bad-soft: #3a2420;
+  --speak: #e8a33d;
+  --on-speak: #2a1b05;
+  --paper: #1c2722;
+  --dot: #2a3a33;
+  --scrim: rgb(5 10 8 / .7);
+  --series-1: #9fd3bb;
+  --series-2: #e09a7f;
+  --series-3: #7fb4cc;
+  --series-4: #e2b571;
+  --series-muted: #7d8b86;
+  --map-1: #22332d;
+  --map-2: #2c4a3e;
+  --map-3: #3f7a63;
+  --map-4: #6fb08f;
+  --map-5: #b9e3cb;
+  --map-ink-strong: #14201b;
+  --grid: #2a3a33;
+  --axis: #46574f;
+  --shadow: 0 12px 30px -16px rgb(0 0 0 / .7);
+  --paper-hi: #1c2722;
+  --rail: #19231f;
+  --hero: #1e3832;
+  --hero-ink: #f1ecdc;
+  --hero-mute: #a7b9ae;
+  --terracotta: #e09a7f;
+  --ochre: #e2b571;
+  --ok-fill: #8cc49b;
+  --sage: #22332d;
+  --clay-pale: #33281f;
+  --blue-pale: #1f3030;
+  --mark: #5a4526;
+  --drop-shadow: rgb(0 0 0 / .4);
+}

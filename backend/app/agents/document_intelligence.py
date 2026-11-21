@@ -1,0 +1,153 @@
+"""Document Intelligence agent: chunk uploaded text, extract topics, store everything."""
+from app import db
+from app.agents.logger import log_agent
+from app.ai import embeddings
+from app.ai.gemini import extract_list, llm_json
+from app.config import settings
+from app.domain import retrieval, titles
+from app.errors import BadRequestError, LLMError
+
+SYSTEM = "You extract the topic structure of study notes. Respond with valid JSON only."
+
+
+MAX_TOPICS = 60   # a full syllabus (5 units of 8-12 topics) fits
+TOPIC_TEXT_CHARS = 60_000   # about 15k tokens: enough for a whole syllabus booklet in one call
+
+
+def _llm_topics(text: str):
+    prompt = (
+        f'Return JSON {{"topics": ["Topic 1", "Topic 2"]}}: 1-{MAX_TOPICS} study topics (1-6 words each) covering the notes '
+        "below, in the order they appear. If the notes contain several subjects or courses, start each topic with a short "
+        'subject name so topics are distinguishable (for example "DBMS: Normalization"). Skip administrative parts such as '
+        "reference books, marks, credits or exam rules.\n"
+        "If the text is a syllabus or a list of topics (short items, few full sentences), keep EVERY listed topic as its own "
+        "topic, even a single word such as \"Paging\" or \"Deadlock\": do not merge items, drop them or summarise them into "
+        "broader groups. Keep the student's own wording.\n\nNotes:\n" + text[:TOPIC_TEXT_CHARS]
+    )
+    data = llm_json(SYSTEM, prompt, temperature=0.2, timeout_ms=settings.gemini_long_timeout_ms)
+    names = [str(t).strip() for t in extract_list(data, "topics") if str(t).strip()]
+    if not names:
+        raise LLMError("Gemini returned no topics")
+    return list(dict.fromkeys(names))[:MAX_TOPICS]
+
+
+def _heading_topics(chunks):
+    seen, names = set(), []
+    for c in chunks:
+        h = c["heading"].strip()
+        if h and h.lower() not in seen:
+            seen.add(h.lower())
+            names.append(h)
+    return names
+
+
+HEADING_WEIGHT = 3        # a topic word found in the chunk's heading counts this many times more than one in its body
+MIN_ASSIGN_SCORE = 0.5    # a chunk is filed under a topic only if at least this share of the topic's words match it
+
+
+def _topic_tokens(topics):
+    """Per topic: {word: weight}. A word used by many topics ("data", "unit") says little, so it weighs less."""
+    token_sets = {t["id"]: set(retrieval.tokenize(t["topic_name"])) for t in topics}
+    topics_using = {}
+    for tokens in token_sets.values():
+        for token in tokens:
+            topics_using[token] = topics_using.get(token, 0) + 1
+    return {tid: {token: 1 / topics_using[token] for token in tokens} for tid, tokens in token_sets.items()}
+
+
+def _assign_topic(chunk, topics, weights):
+    """Pick the topic a chunk belongs to: exact heading match, else the best weighted word overlap.
+
+    The score is the share of the topic's (weighted) words that appear in the chunk, with extra credit for words
+    in the heading, so a long or generic topic name cannot win just by matching common words. Chunks that match no
+    topic well stay unfiled (still searchable); a topic without a chunk shows its closest passages instead.
+    """
+    heading = chunk["heading"].lower()
+    for t in topics:
+        if t["topic_name"].lower() == heading:
+            return t["id"]
+    heading_tokens = set(retrieval.tokenize(chunk["heading"]))
+    body_tokens = set(retrieval.tokenize(chunk["text"]))
+    best, best_score = None, 0.0
+    for t in topics:
+        topic_weights = weights[t["id"]]
+        total = sum(topic_weights.values())
+        if not total:
+            continue
+        matched = sum(w * (HEADING_WEIGHT if tok in heading_tokens else 1) for tok, w in topic_weights.items()
+                      if tok in heading_tokens or tok in body_tokens)
+        score = matched / total
+        if score > best_score:
+            best, best_score = t["id"], score
+    if best_score >= MIN_ASSIGN_SCORE:
+        return best
+    # a weak match (one shared word such as "hierarchy") is not enough; a single-topic document is the only exception
+    return topics[0]["id"] if len(topics) == 1 else None
+
+
+def _model_title(text: str) -> str | None:
+    """A 3-6 word title from the first 1,500 characters; None if the model is unavailable (the file name is used then)."""
+    try:
+        data = llm_json(SYSTEM, 'Return JSON {"title": "..."}: a 3-6 word title for these study notes, in the notes\' own language, no quotes or file extension.\n\n' + text[:1500],
+                        temperature=0.2, timeout_ms=settings.gemini_long_timeout_ms)
+        return str(data.get("title", "")).strip() or None if isinstance(data, dict) else None
+    except Exception:  # noqa: BLE001 - a title is cosmetic
+        return None
+
+
+def _embed(stored) -> int:
+    """Vectors for new chunks. A chunk whose exact text was already embedded (the demo notes, for every guest) reuses that vector instead of calling Gemini."""
+    missing = []
+    for chunk in stored:
+        known = db.one("SELECT e.vector FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id WHERE c.text = ? LIMIT 1", (chunk["text"],))
+        if known:
+            db.execute("INSERT OR REPLACE INTO chunk_embeddings (chunk_id, vector) VALUES (?, ?)", (chunk["id"], known["vector"]))
+        else:
+            missing.append(chunk)
+    return (len(stored) - len(missing)) + embeddings.embed_chunks(missing)
+
+
+def ingest_document(user_id: int, file_name: str, text: str, use_llm: bool = True, *, url: str | None = None, metadata_title: str | None = None):
+    """Chunk + topics + initial mastery rows. Returns {document_id, status, topics_found}."""
+    db.ensure_user(user_id)
+    chunks = retrieval.chunk_text(text)
+    if not chunks:
+        raise BadRequestError("No readable text found in the document.")
+
+    # Topics come from Gemini. use_llm=False is only for the seeded demo document, whose topics are
+    # its own section titles (explicit seed data, not a fallback).
+    names = _llm_topics(text) if use_llm else _heading_topics(chunks)
+    source = "gemini" if use_llm else "seed headings"
+
+    if url:   # the same page imported twice is one source
+        existing = db.one("SELECT id, file_name FROM documents WHERE user_id = ? AND source_url = ?", (user_id, titles.normalise_url(url)))
+        if existing:
+            kept = [{"id": t["id"], "topic_name": t["topic_name"]} for t in db.query("SELECT id, topic_name FROM topics WHERE document_id = ?", (existing["id"],))]
+            return {"document_id": existing["id"], "status": "already_added", "topics_found": kept}
+    weak_name = titles.is_weak(file_name) and not url
+    title = titles.best_title(file_name, text, metadata_title, _model_title(text) if (use_llm and weak_name and not titles.heading_title(text)) else None, name_first=bool(url))
+    doc_id = db.execute("INSERT INTO documents (user_id, file_name, source_kind, source_url) VALUES (?, ?, ?, ?)",
+                        (user_id, title, titles.kind_for(file_name, url), titles.normalise_url(url) if url else None))
+    topics = []
+    for n in names:
+        tid = db.execute("INSERT INTO topics (document_id, topic_name) VALUES (?, ?)", (doc_id, n))
+        topics.append({"id": tid, "topic_name": n})
+        db.execute("INSERT OR IGNORE INTO learner_mastery (user_id, topic_id) VALUES (?, ?)", (user_id, tid))
+    weights = _topic_tokens(topics)
+    stored = []
+    for c in chunks:
+        chunk_id = db.execute(
+            "INSERT INTO chunks (document_id, topic_id, heading, text) VALUES (?, ?, ?, ?)",
+            (doc_id, _assign_topic(c, topics, weights), c["heading"], c["text"]),
+        )
+        stored.append({"id": chunk_id, **c})
+    # meaning search; 0 if Gemini embeddings failed (logged). use_llm=False is the demo: the same notes for every guest, so vectors are reused
+    embedded = embeddings.embed_chunks(stored) if use_llm else _embed(stored)
+
+    log_agent(user_id, "document_intelligence",
+              f"Uploaded {file_name}: {len(chunks)} chunks",
+              f"Found {len(topics)} topics via {source}",
+              "Stored chunks, topics and starting mastery (50)"
+              + (f"; embedded {embedded} chunks for meaning search" if embedded else "; search by words only (embedding failed)"),
+              0.9)
+    return {"document_id": doc_id, "status": "processed", "topics_found": topics}

@@ -1,0 +1,120 @@
+"""Flashcards agent: cards written by Gemini from a topic's notes, plus cards from the student's own mistakes,
+and their review schedule (spaced repetition)."""
+from datetime import date, timedelta
+
+from app import db
+from app.agents.logger import log_agent
+from app.ai.gemini import extract_list, llm_json
+from app.domain import retrieval
+from app.errors import LLMError, NotFoundError
+
+SYSTEM = "You write short, exam-useful flashcards from study notes. Respond with valid JSON only."
+CARDS_PER_TOPIC = 6
+MAX_SIDE = 300
+
+
+def _clean(text) -> str:
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= MAX_SIDE else text[: MAX_SIDE - 1].rstrip() + "…"
+
+
+def generate(user_id: int, topic_id: int):
+    """Replace the topic's note cards with fresh ones; add a card per mistake. Returns the topic's cards."""
+    topic = db.one("SELECT id, document_id, topic_name FROM topics WHERE id = ?", (topic_id,))
+    if not topic:
+        raise NotFoundError("Unknown topic")
+    passages = retrieval.retrieve(topic["document_id"], topic["topic_name"], k=4)
+    context = "\n\n".join(p["text"] for p in passages)
+    if not context:
+        raise NotFoundError("Nothing in the notes for this topic yet.")
+    source = ("using standard college-level knowledge of it (these notes are a syllabus that only names the topic; keep to how it is taught there)"
+              if retrieval.is_outline(passages) else "using ONLY these notes")
+    prompt = (f'Write {CARDS_PER_TOPIC} flashcards about "{topic["topic_name"]}" {source}. Return JSON '
+              '{"cards": [{"front": "a short question or term", "back": "the answer in 1-2 sentences, with a formula or '
+              'example if the notes have one"}]}. Mix definitions, formulas, worked numbers and "why" questions.\n\n'
+              f"Notes:\n{context}")
+    cards = [(c.get("front"), c.get("back")) for c in extract_list(llm_json(SYSTEM, prompt, temperature=0.4), "cards")
+             if isinstance(c, dict)]
+    cards = [(_clean(f), _clean(b)) for f, b in cards if _clean(f) and _clean(b)]
+    if not cards:
+        raise LLMError("Gemini did not return usable flashcards.")
+
+    mistakes = mistake_cards(user_id, topic_id)
+    with db.get_conn() as conn:
+        conn.execute("DELETE FROM flashcards WHERE user_id = ? AND topic_id = ?", (user_id, topic_id))
+        conn.executemany("INSERT INTO flashcards (user_id, topic_id, front, back, source) VALUES (?, ?, ?, ?, 'notes')",
+                         [(user_id, topic_id, f, b) for f, b in cards])
+        conn.executemany("INSERT INTO flashcards (user_id, topic_id, front, back, source) VALUES (?, ?, ?, ?, 'mistake')",
+                         [(user_id, topic_id, front, back) for front, back in mistakes])
+    log_agent(user_id, "flashcards", f"Cards requested for {topic['topic_name']}",
+              f"{len(cards)} cards from notes, {len(mistakes)} from mistakes", "Saved the deck", 0.8)
+    return cards_for(user_id, topic_id)
+
+
+def mistake_cards(user_id: int, topic_id: int):
+    """One card per question the student made a mistake on, even if a follow-up later corrected it (they still made it):
+    the question in front; behind it the right answer, why, and the wrong belief that was detected."""
+    rows = db.query(
+        "SELECT q.id, q.question, q.options, q.correct, q.explanation, x.misconception_text "
+        "FROM misconceptions x JOIN quiz_questions q ON q.id = x.question_id "
+        "WHERE x.user_id = ? AND x.topic_id = ? ORDER BY x.id DESC", (user_id, topic_id))
+    cards, seen = [], set()
+    for r in rows:
+        if r["id"] in seen:
+            continue
+        seen.add(r["id"])
+        options = db.loads(r["options"], [])
+        right = next((o for o in options if o.strip().upper().startswith(r["correct"])), r["correct"])
+        back = f"Answer: {right}. {r['explanation'] or ''}" + (f" Watch out: {r['misconception_text']}" if r["misconception_text"] else "")
+        cards.append((_clean(r["question"]), _clean(back)))
+    return cards
+
+
+def cards_for(user_id: int, topic_id: int = None):
+    sql = ("SELECT f.id, f.topic_id, t.topic_name AS topic, f.front, f.back, f.source, f.box, f.due_on FROM flashcards f "
+           "JOIN topics t ON t.id = f.topic_id WHERE f.user_id = ?")
+    args = [user_id]
+    if topic_id:
+        sql += " AND f.topic_id = ?"
+        args.append(topic_id)
+    return db.query(sql + " ORDER BY f.topic_id, f.source DESC, f.id", tuple(args))
+
+
+# ---------------------------------------------------------------- review (spaced repetition, Leitner boxes)
+# box -> days until the card comes back. A card you knew moves up a box; one you did not goes back to box 0 (today).
+BOX_DAYS = (0, 1, 3, 7, 14, 30)
+
+
+def next_box(box: int | None, knew: bool, hard: bool = False) -> int:
+    """Got it moves up a box, Again goes back to box 0, Hard steps back one box (the card is not forgotten, just shaky)."""
+    if knew:
+        return min((box or 0) + 1, len(BOX_DAYS) - 1)
+    return max((box or 0) - 1, 0) if hard else 0
+
+
+def due_cards(user_id: int, today: date):
+    return db.query(
+        "SELECT f.id, f.topic_id, t.topic_name AS topic, f.front, f.back, f.source, f.box FROM flashcards f "
+        "JOIN topics t ON t.id = f.topic_id WHERE f.user_id = ? AND (f.due_on IS NULL OR f.due_on <= ?) "
+        "ORDER BY COALESCE(f.box, 0), f.id", (user_id, today.isoformat()))
+
+
+def reset_deck(user_id: int, today: date) -> dict:
+    """"Reset today's deck": every card comes back as new, due now."""
+    db.execute("UPDATE flashcards SET box = 0, due_on = NULL, reviewed_at = NULL WHERE user_id = ?", (user_id,))
+    return {"due_count": len(due_cards(user_id, today))}
+
+
+def review(user_id: int, card_id: int, knew: bool, today: date, hard: bool = False):
+    card = db.one("SELECT id, box, topic_id FROM flashcards WHERE id = ? AND user_id = ?", (card_id, user_id))
+    if not card:
+        raise NotFoundError("Unknown flashcard")
+    box = next_box(card["box"], knew, hard)
+    due = today + timedelta(days=BOX_DAYS[box])
+    db.execute("UPDATE flashcards SET box = ?, due_on = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?",
+               (box, due.isoformat(), card_id))
+    result = {"id": card_id, "box": box, "due_on": due.isoformat(), "due_count": len(due_cards(user_id, today))}
+    if card.get("topic_id") is not None:   # the rating is evidence about the topic: "Again" lowers it, "Got it" raises it
+        from app.services import mastery_log
+        result["mastery"] = mastery_log.apply_card(user_id, card["topic_id"], "known" if knew else "hard" if hard else "again")
+    return result

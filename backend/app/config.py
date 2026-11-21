@@ -1,0 +1,137 @@
+"""Application settings: the ONLY module that reads environment variables.
+
+Values come from the process environment, optionally loaded from ``backend/.env``
+(copy ``.env.example``). Code elsewhere imports ``settings`` and never calls ``os.getenv``.
+Fixed business constants (mastery maths, audio formats, ...) live next to the code that
+uses them, not here.
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+REPO_DIR = BACKEND_DIR.parent
+
+load_dotenv(BACKEND_DIR / ".env")
+
+
+class ConfigError(RuntimeError):
+    """An environment variable is set to an unusable value. Raised at startup so it fails fast."""
+
+
+def _str(name: str, default: str = "") -> str:
+    return os.getenv(name, default).strip()
+
+
+def _bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    return default if raw is None else raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _int(name: str, default: int, minimum: int = 0) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be an integer, got {raw!r}") from exc
+    if value < minimum:
+        raise ConfigError(f"{name} must be >= {minimum}, got {value}")
+    return value
+
+
+def _csv(name: str, default: str) -> tuple[str, ...]:
+    return tuple(part.strip() for part in _str(name, default).split(",") if part.strip())
+
+
+@dataclass(frozen=True)
+class Settings:
+    # --- Gemini (the only model/vendor)
+    gemini_api_key: str
+    gemini_model: str            # text agents (JSON mode)
+    gemini_live_model: str       # live voice tutor
+    gemini_embed_model: str      # note search (embeddings)
+    gemini_timeout_ms: int       # a slow call becomes a 502 instead of hanging
+    gemini_long_timeout_ms: int  # for one-off heavy calls such as reading a whole uploaded document
+    live_voice: str
+    live_affective_dialog: bool  # not supported by every Live model
+    session_cap_seconds: int     # Live audio sessions are limited to ~15 minutes
+    # --- server
+    host: str
+    port: int
+    reload: bool
+    enable_docs: bool            # /docs, /redoc and /openapi.json; off unless ENABLE_DOCS=true (hidden in production)
+    cors_origins: tuple[str, ...]
+    log_level: str
+    max_upload_mb: int
+    daily_voice_minutes: int     # voice time per student per day; protects the Gemini quota and caps the cost
+    rate_limit_per_minute: int   # Ask, quiz/flashcard/mock generation and voice starts per student (or address) per minute; 0 = off
+    # --- storage / data
+    db_path: Path
+    database_url: str           # postgresql://... : use Postgres (Neon) instead of the SQLite file at db_path
+    db_schema: str              # optional Postgres schema to work in (used to keep test runs apart from real data)
+    samples_dir: Path
+    demo_user_id: int
+    timezone: str          # the calendar used for "today" when the browser does not say (APP_TIMEZONE)
+    auth_secret: str            # signs login tokens; empty = a random one is kept next to the database
+    # --- accounts, email, reminders (each feature stays off until its settings are filled in)
+    app_url: str                # the frontend address, used in links inside emails
+    google_client_id: str       # Google sign-in (OAuth client id); empty = no Google button
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str              # e.g. a Gmail address
+    smtp_password: str          # e.g. a Gmail app password; empty = no emails (no password reset, no email reminders)
+    smtp_from: str
+    vapid_public_key: str       # web push (browser and Play Store app notifications); empty = no push
+    vapid_private_key: str
+    vapid_subject: str
+    cron_secret: str            # protects POST /api/reminders/run (called once a day by a scheduler)
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        return cls(
+            gemini_api_key=_str("GEMINI_API_KEY"),
+            gemini_model=_str("GEMINI_MODEL", "gemini-3.1-flash-lite"),
+            gemini_live_model=_str("GEMINI_LIVE_MODEL", "gemini-3.8-live"),
+            gemini_embed_model=_str("GEMINI_EMBED_MODEL", "gemini-embedding-001"),
+            gemini_timeout_ms=_int("GEMINI_TIMEOUT_MS", 30_000, minimum=1_000),
+            gemini_long_timeout_ms=_int("GEMINI_LONG_TIMEOUT_MS", 90_000, minimum=1_000),
+            live_voice=_str("LIVE_VOICE", "Kore"),
+            live_affective_dialog=_bool("LIVE_AFFECTIVE_DIALOG", False),
+            session_cap_seconds=_int("SESSION_CAP_SECONDS", 840, minimum=30),
+            host=_str("HOST", "0.0.0.0"),
+            port=_int("PORT", 5000, minimum=1),
+            reload=_bool("RELOAD", False),
+            enable_docs=_bool("ENABLE_DOCS", False),
+            cors_origins=_csv("CORS_ORIGINS", "*"),
+            log_level=_str("LOG_LEVEL", "INFO").upper(),
+            max_upload_mb=_int("MAX_UPLOAD_MB", 10, minimum=1),
+            daily_voice_minutes=_int("DAILY_VOICE_MINUTES", 20, minimum=1),
+            rate_limit_per_minute=_int("RATE_LIMIT_PER_MINUTE", 20),
+            database_url=_str("DATABASE_URL"),
+            db_schema=_str("DB_SCHEMA"),
+            db_path=Path(_str("DB_PATH") or BACKEND_DIR / "data" / "eklavya.db"),
+            samples_dir=Path(_str("SAMPLES_DIR") or REPO_DIR / "samples"),
+            demo_user_id=_int("DEMO_USER_ID", 1, minimum=1),
+            timezone=_str("APP_TIMEZONE", "Asia/Kolkata"),
+            auth_secret=_str("AUTH_SECRET"),
+            app_url=_str("APP_URL", "http://localhost:3000").rstrip("/"),
+            google_client_id=_str("GOOGLE_CLIENT_ID"),
+            smtp_host=_str("SMTP_HOST", "smtp.gmail.com"),
+            smtp_port=_int("SMTP_PORT", 465, minimum=1),
+            smtp_user=_str("SMTP_USER"),
+            smtp_password=_str("SMTP_PASSWORD").replace(" ", ""),   # Gmail shows app passwords in groups of 4
+            smtp_from=_str("SMTP_FROM"),
+            vapid_public_key=_str("VAPID_PUBLIC_KEY"),
+            vapid_private_key=_str("VAPID_PRIVATE_KEY"),
+            vapid_subject=_str("VAPID_SUBJECT"),
+            cron_secret=_str("CRON_SECRET"),
+        )
+
+
+settings = Settings.from_env()

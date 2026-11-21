@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+google-genai
+pdfplumber
+psycopg[binary,pool]
+pywebpush
+requests
+python-dotenv
+python-multipart
+tzdata

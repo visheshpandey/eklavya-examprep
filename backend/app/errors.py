@@ -1,0 +1,112 @@
+"""Application errors and the one place that turns them into HTTP responses.
+
+Domain and agent code raises these instead of building JSON responses, so every endpoint
+answers failures in the same shape: ``{"error": "<message>", "code": "<machine_code>"}``.
+The frontend reads ``error`` to show the message.
+"""
+from __future__ import annotations
+
+import logging
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+log = logging.getLogger(__name__)
+
+FIELD_NAMES = {"question": "Your question", "text": "Your message", "note": "Your note", "motion": "The motion", "name": "The name"}
+
+
+def validation_message(errors) -> str:
+    """A specific sentence for the first problem a student can fix (a question that is too long or empty); a generic one otherwise."""
+    for e in errors:
+        field = str(e.get("loc", ["", ""])[-1])
+        what = FIELD_NAMES.get(field)
+        if e.get("type") == "string_too_long":
+            limit = (e.get("ctx") or {}).get("max_length")
+            return f"{what or 'This text'} is too long. Please keep it under {limit} characters."
+        if e.get("type") in ("string_too_short", "missing") and field == "question":
+            return "Please type a question first."
+    return "The request was not valid."
+
+
+class AppError(Exception):
+    """Base class: an expected failure with a safe, user-facing message."""
+
+    status_code = 500
+    code = "internal_error"
+
+
+class BadRequestError(AppError):
+    status_code = 400
+    code = "bad_request"
+
+
+class UnauthorizedError(AppError):
+    status_code = 401
+    code = "unauthorized"
+
+
+class ForbiddenError(AppError):
+    status_code = 403
+    code = "forbidden"
+
+
+class NotFoundError(AppError):
+    status_code = 404
+    code = "not_found"
+
+
+class PayloadTooLargeError(AppError):
+    status_code = 413
+    code = "payload_too_large"
+
+
+class TooManyRequestsError(AppError):
+    status_code = 429
+    code = "too_many_requests"
+
+
+class RateLimitedError(TooManyRequestsError):
+    """Too many Gemini-backed calls in a minute; ``retry_after`` (seconds) goes out as the Retry-After header."""
+
+    code = "rate_limited"
+
+    def __init__(self, message: str, retry_after: int = 60):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+class LLMError(AppError):
+    """Gemini failed (network, quota, timeout, or unusable output after one retry)."""
+
+    status_code = 502
+    code = "llm_unavailable"
+
+
+def _body(message: str, code: str, **extra) -> dict:
+    return {"error": message, "code": code, **extra}
+
+
+def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(AppError)
+    async def _app_error(_: Request, exc: AppError):
+        if exc.status_code >= 500:
+            log.warning("%s: %s", exc.code, exc)
+        headers = {"Retry-After": str(exc.retry_after)} if isinstance(exc, RateLimitedError) else None
+        return JSONResponse(status_code=exc.status_code, content=_body(str(exc), exc.code), headers=headers)
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation(_: Request, exc: RequestValidationError):
+        fields = [{"field": ".".join(str(p) for p in e["loc"][1:]), "problem": e["msg"]} for e in exc.errors()]
+        return JSONResponse(status_code=422, content=_body(validation_message(exc.errors()), "invalid_request", fields=fields))
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http(_: Request, exc: StarletteHTTPException):
+        return JSONResponse(status_code=exc.status_code, content=_body(str(exc.detail), "http_error"))
+
+    @app.exception_handler(Exception)
+    async def _unexpected(_: Request, exc: Exception):
+        log.exception("Unhandled error")
+        return JSONResponse(status_code=500, content=_body("Something went wrong on the server.", "internal_error"))

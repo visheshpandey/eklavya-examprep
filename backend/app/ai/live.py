@@ -1,0 +1,634 @@
+"""Gemini Live (native audio) tutor session: browser <-> backend <-> Gemini.
+
+Wire format with the browser (see docs/CODEBASE.md, section 4):
+  binary frames   mic audio in (PCM16 mono 16 kHz) / tutor audio out (PCM16 mono 24 kHz)
+  JSON frames     transcript, emotion, interrupted, mastery, mission, quiz_question, turn_complete, error
+  client JSON     {"type":"user_text","text":...} | {"type":"audio_stream_end"} | {"type":"end"}
+Gemini is the only model; any failure is sent to the client as {"type":"error","message":...}.
+"""
+import asyncio
+import base64
+import binascii
+import json
+import re
+import logging
+import secrets
+import time
+from contextlib import asynccontextmanager
+from typing import Optional
+
+from fastapi import WebSocket
+from starlette.websockets import WebSocketState
+from google import genai
+from google.genai import types
+
+from app import db
+from app.ai import prompts
+from app.ai.tools import ToolContext, ask_quiz_question, dispatch, tools_for
+from app.domain import echo, language_check
+from app.domain.scoring import VIVA_QUESTIONS
+from app.config import settings
+
+log = logging.getLogger(__name__)
+TYPED_ANSWER_SECONDS = 15   # how long after a tap or typed message a letter answer may be graded
+
+INPUT_AUDIO_MIME = "audio/pcm;rate=16000"   # browser -> Gemini
+PHOTO_TYPES = ("image/jpeg", "image/png", "image/webp")
+MAX_PHOTO_BYTES = 4 * 1024 * 1024            # a phone photo after the browser shrinks it is far smaller
+# markers Gemini's transcription sometimes writes instead of words, e.g. "<no speech>{pause}": never shown
+TRANSCRIPT_MARKERS = re.compile(r"<\s*no speech\s*>|<\s*noise\s*>|\{\s*pause\s*\}", re.I)
+FOCUSED_MODES = ("learn", "test", "revise", "viva", "debate")   # modes that need a topic
+REVISE_QUESTIONS = 2
+DEBATE_STYLES = {
+    "tough": ("Tough opponent. Press hard on every weak spot, ask for proof every time, and concede almost nothing. "
+              "Stay respectful."),
+    "friendly": ("Friendly sparring partner. Still never agree by default and still argue your side every turn, but use "
+                 "a lighter tone, one challenge per turn, and give the student a moment to think. Good for a first debate."),
+}
+# who the tutor is in learn/test/revise/free sessions: a personality line for the prompt and a Gemini Live voice
+TUTORS = {
+    "mentor": {"voice": None,   # None = LIVE_VOICE from the settings
+               "style": ("Calm mentor. Speak a little slower, warm and steady, with gentle encouragement and clear "
+                         "pauses. Reassure first, then guide.")},
+    "senior": {"voice": "Puck",
+               "style": ("Friendly senior. Upbeat, warm and a little playful, like a senior who loves this subject. Quick "
+                         "reactions, light humour, everyday examples, lots of energy. Always respectful: aap, never slang or pet names.")},
+}
+RESUME_SECONDS = 10 * 60   # how long a dropped call can be picked up again where it was
+_resumable: dict = {}      # token -> (expires_at, user_id, state): one entry per call that ended without the student ending it
+RESUME_FIELDS = ("asked_ids", "results", "current_question_id", "current_question", "mission_refreshed", "viva_id",
+                 "viva_question", "viva_answers", "debate_id", "debate_rounds")
+RECONNECTS = 1   # a dropped Gemini connection is retried once, invisibly, before the student is asked to reconnect
+# The browser maps these codes to friendly text in its own language; the message is the English fallback. Raw provider
+# text (exceptions, JSON) is logged on the server and never sent.
+ERROR_MESSAGES = {
+    "upstream_unavailable": "The voice connection was interrupted. Reconnect to carry on.",
+    "quota": "Eklavya's voice service is very busy right now. Wait a minute and try again.",
+    "not_configured": "Voice is not set up on this server yet.",
+    "session_limit": "Session time limit reached. Start a new session to continue.",
+    "bad_photo": "That photo could not be sent. Use a JPG, PNG or WebP under 4 MB.",
+    "need_notes": "Upload your notes first, then start the voice session.",
+    "need_topic": "Pick a topic from your notes first.",
+    "daily_limit": "You have used today's voice time. Typed questions in Ask still work, and voice is back tomorrow.",
+}
+LANGUAGE_NAMES = {"english": "English", "hindi": "Hindi", "hinglish": "Hinglish (Hindi and English mixed)"}
+# what the tutor may speak and write, per language (prompts/language_rules.md); also used by the Ask tutor
+LANGUAGE_RULES = {
+    "english": "English.",
+    "hindi": "Hindi written in Devanagari, keeping technical terms in English.",
+    "hinglish": "Hindi words written in Roman letters (never Devanagari) mixed with English, the way students write on WhatsApp.",
+}
+
+
+def session_plan(mode: str, topic_name: str, total: int = 3) -> str:
+    """Extra instructions when the student picked a topic: teach it step by step, then test by voice."""
+    if mode == "learn":
+        return (f'# This session\'s plan: LEARN, then TEST. Topic: "{topic_name}"\n'
+                f'The student chose to learn "{topic_name}". Follow these steps in order, in short spoken turns:\n'
+                f'1. Right away call search_notes with "{topic_name}" and teach the topic from what it returns, in 3-4 small steps. '
+                'One idea per turn, each with a simple everyday example. In EVERY step call show_board at the same moment you speak '
+                '(the definition as steps, the formula with a worked example from the notes, or a small comparison table), so the '
+                'student sees it while hearing it. After each step ask ONE quick question to check they got it, '
+                'wait for their answer, and adapt if they are confused.\n'
+                f'2. When the topic is covered, say you will now take a short voice test ({total} questions) and check they are ready.\n'
+                '3. Test: call ask_quiz_question (it stays on this topic), read the question and the four options, wait for the spoken '
+                'answer, call grade_answer, then react as described in Quiz mode. The app moves to the next question by itself after a few '
+                'seconds, or when the student presses Next: if a message says the next question is already on screen, read it aloud; '
+                'otherwise call ask_quiz_question yourself.\n'
+                '4. When a tool result says test_complete, give a short warm spoken summary of how they did, then call get_mission '
+                'and tell them what to do next.\n'
+                'Do not skip steps on your own. But if the student asks to be tested at any point ("ab mera test lo", "test me", "quiz me"), '
+                'stop teaching at once, say one short line, and start the test (step 3) right away.')
+    if mode == "test":
+        return (f'# This session\'s plan: TEST. Topic: "{topic_name}"\n'
+                f'The student chose to be tested on "{topic_name}" by voice ({total} questions). Do not teach first.\n'
+                '1. Say one short line that you will start, then call ask_quiz_question, read the question and the four options, '
+                'wait for the spoken answer, call grade_answer, react as described in Quiz mode, and ask the next question.\n'
+                '2. When a tool result says test_complete, give a short warm spoken summary, then call get_mission and tell them what to do next.')
+    if mode == "revise":
+        return (f'# This session\'s plan: QUICK REVISION (about 5 minutes). Topic: "{topic_name}"\n'
+                f'The student practised "{topic_name}" before and it is due for revision, so it does not fade.\n'
+                f'1. Call search_notes for "{topic_name}", then call show_board with the single most important formula or idea '
+                '(with a worked example from the notes) and recap it in two or three short sentences. No long lesson.\n'
+                f'2. Then a {total}-question check: call ask_quiz_question, read the question and options, wait, call grade_answer, '
+                'react in one line, next question.\n'
+                '3. When a tool result says test_complete, say in one or two sentences how it went and that Eklavya will bring '
+                'this topic back at the right time. Do not start anything new.\n'
+                'Keep speaking the session language in every turn, the recap and the questions included.')
+    return ""
+
+
+def viva_plan(topic_name: str) -> str:
+    return (f'# This session\'s plan: VIVA. Topic: "{topic_name}"\n'
+            f'Take a {VIVA_QUESTIONS}-question viva on "{topic_name}" only.\n'
+            '1. Greet the student in one line like an examiner, say there will be five questions and a report card at the end, '
+            'and ask if they are ready.\n'
+            f'2. Call search_notes for "{topic_name}". Then for each of the {VIVA_QUESTIONS} questions: ask it aloud and call '
+            'ask_viva_question at the same time, listen, probe at most twice, call mark_viva_answer, say a neutral one-liner, '
+            'move on.\n'
+            '3. After the last mark call finish_viva with honest strengths and one thing to improve, then tell the student '
+            'their marks out of ten, what went well and what to work on, warmly. That is the only time you may encourage them.')
+
+
+def debate_scoring_rules() -> str:
+    return ("\n\n# Scoring (silent)\n"
+            "- Right after each argument the student makes, call score_argument with fair 0-10 scores for evidence, logic and "
+            "rebuttal. Never say the scores aloud; they appear on the student's screen.\n"
+            "- After both closing statements and before the verdict, call finish_debate with honest overall scores for the "
+            "student and for yourself. If the student argued better, say so: an honest verdict is part of the game.")
+
+
+def debate_plan(topic_name: str, side: str, motion: str) -> str:
+    """The debate rules for the live tutor: the topic, which side it argues, and the motion (or ask it to pick one)."""
+    stated = motion or f'none given, so pick one clear, debatable one-sentence motion about "{topic_name}" and say it in your first turn'
+    return (prompts.load("debate_plan.md").replace("{{TOPIC}}", topic_name)
+            .replace("{{SIDE}}", side).replace("{{MOTION}}", stated))
+
+
+def build_system_prompt(language: str, topics: list, mode: str = "free", focus_topic: Optional[dict] = None,
+                        debate: Optional[dict] = None, tutor: str = "mentor") -> str:
+    persona = "persona_eklavya.md"
+    plan = ""
+    if focus_topic and mode in ("learn", "test"):
+        plan = session_plan(mode, focus_topic["topic_name"])
+    elif focus_topic and mode == "revise":
+        plan = session_plan(mode, focus_topic["topic_name"], REVISE_QUESTIONS)
+    elif focus_topic and mode == "viva":
+        persona, plan = "persona_examiner.md", viva_plan(focus_topic["topic_name"])
+    elif focus_topic and mode == "debate" and debate:
+        persona = "persona_debater.md"
+        plan = debate_plan(focus_topic["topic_name"], debate["side"], debate["motion"]) + debate_scoring_rules()
+    style = DEBATE_STYLES.get((debate or {}).get("style"), DEBATE_STYLES["tough"])
+    rules = prompts.load("language_rules.md").replace("{{LANGUAGE_RULE}}", LANGUAGE_RULES.get(language, LANGUAGE_RULES["hinglish"]))
+    return (prompts.load(persona).replace("{{LANGUAGE}}", LANGUAGE_NAMES.get(language, LANGUAGE_NAMES["hinglish"]))
+            .replace("{{TOPICS}}", ", ".join(t["topic_name"] for t in topics) or "none yet: the student has not added notes, so just have a normal conversation and answer from your own knowledge")
+            .replace("{{STYLE}}", style)
+            .replace("{{SESSION_PLAN}}", plan)
+            + (f"\n\n# Your personality in this session\n{TUTORS.get(tutor, TUTORS['mentor'])['style']}\n"
+               if persona == "persona_eklavya.md" else "")
+            + "\n\n" + rules
+            + "\n\n" + prompts.load("prompt_safety.md"))
+
+
+def voice_for(tutor: str) -> str:
+    return TUTORS.get(tutor, TUTORS["mentor"])["voice"] or settings.live_voice
+
+
+def opening_message(language: str, mode: str, focus_topic: Optional[dict]) -> str:
+    lang = LANGUAGE_NAMES.get(language, "Hinglish")
+    if focus_topic and mode == "debate":
+        return (f'[The student wants to debate "{focus_topic["topic_name"]}" with you. Say one short, friendly, competitive line in {lang}, '
+                'then give your opening statement right away.]')
+    if focus_topic and mode == "learn":
+        return (f'[The student chose to learn "{focus_topic["topic_name"]}". Say one short friendly line in {lang} that you will '
+                'teach it step by step and then take a short voice test. Then start step 1 right away: call search_notes, then '
+                'call show_board with the first idea (a formula with a worked example, or the definition as steps) and talk '
+                'the student through the board. Keep using show_board in every step after this.]')
+    if focus_topic and mode == "test":
+        return (f'[The student chose to be tested on "{focus_topic["topic_name"]}" by voice. Say one short line in {lang}, '
+                'then start the test.]')
+    if focus_topic and mode == "revise":
+        return (f'[Quick revision of "{focus_topic["topic_name"]}". Say one short line in {lang}, then call search_notes and '
+                f'show_board right away and give the recap, all in {lang}.]')
+    if focus_topic and mode == "viva":
+        return (f'[The student is ready for a viva on "{focus_topic["topic_name"]}". Greet them as the examiner in one line in '
+                f'{lang} and begin.]')
+    return (f"[The student just joined. Greet them warmly in {lang}, in one or two short sentences, "
+            "and ask what they want to work on.]")
+
+
+def build_config(system_prompt: str, tools=None, voice: Optional[str] = None) -> types.LiveConnectConfig:
+    kwargs = dict(
+        response_modalities=["AUDIO"],
+        system_instruction=system_prompt,
+        tools=tools or tools_for("free"),
+        speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice or settings.live_voice))),
+        input_audio_transcription=types.AudioTranscriptionConfig(),
+        output_audio_transcription=types.AudioTranscriptionConfig(),
+        realtime_input_config=types.RealtimeInputConfig(
+            automatic_activity_detection=types.AutomaticActivityDetection(silence_duration_ms=700)),
+    )
+    if settings.live_affective_dialog:
+        kwargs["enable_affective_dialog"] = True
+    return types.LiveConnectConfig(**kwargs)
+
+
+def take_resume(token: Optional[str], user_id: int) -> Optional[dict]:
+    """The saved state of a dropped call, once, for the same student; None when it is unknown or too old."""
+    now = time.monotonic()
+    for key in [k for k, (expires, _, _) in _resumable.items() if expires < now]:
+        _resumable.pop(key, None)
+    entry = _resumable.pop(token, None) if token else None
+    return entry[2] if entry and entry[1] == user_id else None
+
+
+def classify_error(exc: BaseException) -> tuple:
+    """(code, retryable) for a failure on the Gemini side. The exception text itself is only for the server log."""
+    text = f"{type(exc).__name__} {exc}".lower()
+    if "api_key" in text or "api key" in text or "not set" in text:
+        return "not_configured", False
+    if "429" in text or "resource_exhausted" in text or "quota" in text or "rate limit" in text:
+        return "quota", True
+    return "upstream_unavailable", True
+
+
+def _use_longer_keepalive() -> None:
+    """The Gemini client opens its websocket with the library defaults (ping every 20 s, give up after 20 s, wait 10 s
+    for the handshake). On a busy or throttled server that is too tight and the connection drops with 1011 "keepalive
+    ping timeout" or "timed out during opening handshake". It has no setting for this, so the connect call is wrapped."""
+    from google.genai import live as genai_live
+    original = getattr(genai_live, "ws_connect", None)
+    if original is None or getattr(original, "_eklavya_keepalive", False):
+        return
+
+    def connect(*args, **kwargs):
+        kwargs.setdefault("ping_interval", KEEPALIVE_INTERVAL)
+        kwargs.setdefault("ping_timeout", KEEPALIVE_TIMEOUT)
+        kwargs.setdefault("open_timeout", HANDSHAKE_TIMEOUT)
+        return original(*args, **kwargs)
+
+    connect._eklavya_keepalive = True
+    genai_live.ws_connect = connect
+
+
+KEEPALIVE_INTERVAL, KEEPALIVE_TIMEOUT, HANDSHAKE_TIMEOUT = 20, 60, 30
+_use_longer_keepalive()
+_client = None
+_client_lock = asyncio.Lock()
+
+
+async def _get_client():
+    """One Gemini client for the whole server. Building it loads the TLS certificate store, which blocks for seconds on a
+    throttled host: it is done once, in a thread, never on the event loop that answers every voice socket's pings."""
+    global _client
+    async with _client_lock:
+        if _client is None:
+            _client = await asyncio.to_thread(
+                lambda: genai.Client(api_key=settings.gemini_api_key, http_options=types.HttpOptions(api_version="v1beta")))
+        return _client
+
+
+@asynccontextmanager
+async def default_connect(system_prompt: str, tools=None, voice: Optional[str] = None):
+    """Real Gemini Live connection (an async context manager). Replaced in tests."""
+    if not settings.gemini_api_key:
+        raise RuntimeError("GEMINI_API_KEY is not set in backend/.env")
+    client = await _get_client()
+    async with client.aio.live.connect(model=settings.gemini_live_model, config=build_config(system_prompt, tools, voice)) as session:
+        yield session
+
+
+class LiveTutorSession:
+    def __init__(self, ws: WebSocket, user_id: int, language: str, document_id: Optional[int],
+                 topics: list, connect=None, mode: str = "free", focus_topic: Optional[dict] = None,
+                 debate: Optional[dict] = None, tutor: str = "mentor"):
+        self.ws, self.user_id, self.language = ws, user_id, language
+        self.tutor = tutor if tutor in TUTORS else "mentor"
+        self.topics = topics
+        self.mode, self.focus_topic, self.debate = mode, focus_topic, debate   # debate: {"side": "for"|"against", "motion": str}
+        self.connect = connect or default_connect
+        self.ctx = ToolContext(user_id=user_id, document_id=document_id, emit=self.emit, topics=topics,
+                               focus_topic_id=focus_topic["id"] if focus_topic else None, mode=mode, debate=debate,
+                               test_total=REVISE_QUESTIONS if mode == "revise" else 3)
+        self.user_buf, self.tutor_buf = "", ""
+        self.shown = {"user": False, "tutor": False}   # a partial bubble for this role is on screen and needs a final
+        self.turns = 0
+        self.session_id = None
+        self.closed = False
+        self.started = time.monotonic()   # the session time limit counts across reconnects
+        self.token = secrets.token_urlsafe(12)   # lets the browser pick this call up again after its own connection drops
+        self.ended_by_student = False
+        self.nudge = False        # the tutor's last turn slipped on language or address: it is reminded after that turn
+        self.resumed = False
+        self.tutor_audio_until = 0.0   # monotonic time when the speech sent so far will have finished playing
+        self.last_tutor_text = ""      # what the tutor last said, to recognise it coming back through the speakers
+        self.user_turn_echo = False    # part of the student's current turn was judged to be echo
+
+    # ---- the tutor's own voice coming back through the speakers
+    def _test_open(self) -> bool:
+        return self.ctx.focus_topic_id is not None and self.ctx.current_question_id is not None
+
+    def _since_tutor(self) -> float:
+        """Seconds since the tutor's speech finished playing; negative while it is still speaking."""
+        return time.monotonic() - self.tutor_audio_until
+
+    def _mic_gated(self) -> bool:
+        """During a test the microphone is not listened to while the tutor speaks and for a moment after (no headphones means it hears itself)."""
+        return self._test_open() and self._since_tutor() < echo.TAIL_SECONDS
+
+    def _heard_is_echo(self, text: str) -> bool:
+        return echo.is_echo(text, seconds_since_tutor=self._since_tutor(), test_open=self._test_open(), last_tutor_text=self.last_tutor_text)
+
+    # ---- browser-facing helpers
+    async def emit(self, event: dict):
+        if self.closed:
+            return
+        try:
+            await self.ws.send_json(event)
+        except Exception:  # noqa: BLE001 - the browser disconnected mid-send
+            log.debug("Client gone while sending event %s", event.get("type"))
+            self.closed = True
+
+    async def _send_audio(self, data: bytes):
+        if self.closed:
+            return
+        try:
+            await self.ws.send_bytes(data)
+        except Exception:  # noqa: BLE001 - the browser disconnected mid-send
+            log.debug("Client gone while sending audio")
+            self.closed = True
+
+    async def _final(self, role: str, typed: bool = False):
+        buf = self.user_buf if role == "user" else self.tutor_buf
+        text = TRANSCRIPT_MARKERS.sub("", buf).strip()
+        if role == "tutor" and text:
+            text = language_check.strip_markup(language_check.strip_foreign_scripts(text)).strip()   # a Bengali or Tamil word, or tool-call markup, never reaches the chat (it may still have been spoken)
+        if role == "tutor" and text and (slips := language_check.violations(text, self.language)):
+            log.warning("The tutor slipped in %s: %s", self.language, "; ".join(slips))
+            self.nudge = True
+        if role == "user":
+            self.user_buf = ""
+            if text and not typed and (self.user_turn_echo or self._heard_is_echo(text)):
+                text = ""   # the tutor's own voice (or one word right after it): not the student, so not shown, saved or counted
+            self.user_turn_echo = False
+        else:
+            self.tutor_buf = ""
+            if text:
+                self.last_tutor_text = text
+        if text:
+            await asyncio.to_thread(db.execute, "INSERT INTO transcripts (session_id, role, text) VALUES (?, ?, ?)",
+                                    (self.session_id, role, text))
+            await self.emit({"type": "transcript", "role": role, "text": text, "final": True})
+        elif self.shown[role]:
+            # the turn was only a marker such as "<no speech>": tell the browser to drop the bubble it started
+            await self.emit({"type": "transcript", "role": role, "text": "", "final": True})
+        self.shown[role] = False
+
+    async def _partial(self, role: str, chunk: str):
+        """Stream one transcript chunk. Markers can arrive split over chunks ("<no" + " speech>"), so the text shown is
+        the cleaned whole turn so far, sent as a replacement, never the raw chunk."""
+        buf = self.user_buf if role == "user" else self.tutor_buf
+        text = TRANSCRIPT_MARKERS.sub("", buf)
+        text = re.sub(r"<[^>]*$", "", text)     # an unfinished "<no sp..." at the end waits for the next chunk
+        if role == "tutor":
+            text = language_check.strip_markup(language_check.strip_foreign_scripts(text))
+        if role == "user" and text.strip() and self._heard_is_echo(text):
+            self.user_turn_echo = True
+            return
+        if text.strip():
+            await self.emit({"type": "transcript", "role": role, "text": text.strip(), "final": False, "replace": True})
+            self.shown[role] = True
+
+    # ---- Gemini -> browser
+    async def _handle(self, session, msg):
+        sc = getattr(msg, "server_content", None)
+        if sc is not None:
+            if getattr(sc, "interrupted", False):
+                self.tutor_audio_until = time.monotonic()   # its speech was cut off: nothing more will play
+                await self._final("tutor")
+                await self.emit({"type": "interrupted"})
+            it = getattr(sc, "input_transcription", None)
+            if it is not None and getattr(it, "text", None):
+                self.user_buf += it.text
+                await self._partial("user", it.text)
+            ot = getattr(sc, "output_transcription", None)
+            if ot is not None and getattr(ot, "text", None):
+                await self._final("user")
+                self.tutor_buf += ot.text
+                await self._partial("tutor", ot.text)
+            mt = getattr(sc, "model_turn", None)
+            for part in (getattr(mt, "parts", None) or []):
+                inline = getattr(part, "inline_data", None)
+                if inline is not None and getattr(inline, "data", None):
+                    await self._final("user")
+                    self.tutor_audio_until = max(self.tutor_audio_until, time.monotonic()) + echo.audio_seconds(len(inline.data))
+                    await self._send_audio(inline.data)
+            if getattr(sc, "turn_complete", False):
+                await self._final("user")
+                await self._final("tutor")
+                self.turns += 1
+                if self.nudge:   # before turn_complete reaches the browser, so the reminder is on its way before the student replies
+                    self.nudge = False
+                    await session.send_realtime_input(text=language_check.REMINDER.format(
+                        rule=LANGUAGE_RULES.get(self.language, LANGUAGE_RULES["hinglish"])))
+                await self.emit({"type": "turn_complete"})
+
+        tc = getattr(msg, "tool_call", None)
+        if tc is not None and getattr(tc, "function_calls", None):
+            responses = []
+            for fc in tc.function_calls:
+                result = await dispatch(self.ctx, fc.name, dict(fc.args or {}))
+                responses.append(types.FunctionResponse(name=fc.name, id=fc.id, response=result))
+            await session.send_tool_response(function_responses=responses)
+
+        if getattr(msg, "go_away", None) is not None:   # Gemini asks the client to reconnect: treated like any dropped connection
+            raise ConnectionError("Gemini sent go_away")
+
+    async def _gemini_to_browser(self, session):
+        while True:  # receive() yields one turn at a time
+            async for msg in session.receive():
+                await self._handle(session, msg)
+
+    # ---- browser -> Gemini
+    async def _browser_to_gemini(self, session):
+        while True:
+            m = await self.ws.receive()
+            if m["type"] == "websocket.disconnect":
+                return
+            if m.get("bytes"):
+                if self._mic_gated():
+                    continue   # the tutor is speaking in a test: what the microphone hears is its own voice, so Gemini is not given it
+                await session.send_realtime_input(audio=types.Blob(data=m["bytes"], mime_type=INPUT_AUDIO_MIME))
+            elif m.get("text"):
+                try:
+                    data = json.loads(m["text"])
+                except ValueError:
+                    log.debug("Ignoring a client message that is not valid JSON")
+                    continue
+                kind = data.get("type")
+                if kind == "end":
+                    self.ended_by_student = True
+                    return
+                if kind == "audio_stream_end":
+                    await session.send_realtime_input(audio_stream_end=True)
+                elif kind == "user_text" and str(data.get("text", "")).strip():
+                    text = str(data["text"]).strip()
+                    self.ctx.typed_answer_until = time.monotonic() + TYPED_ANSWER_SECONDS   # typed or tapped by the student: a letter may be graded now
+                    await self._final("tutor")       # close Eklavya's open bubble first, so the typed turn lands after it
+                    self.user_buf = text
+                    await self._final("user", typed=True)   # typed or tapped: never mistaken for an echo
+                    await session.send_realtime_input(text=text)
+                elif kind == "photo":
+                    await self._send_photo(session, data)
+                elif kind == "next_question":
+                    await self._advance_test(session)
+
+    async def _advance_test(self, session):
+        """The "Next question" button: the server picks the next question itself and puts it on the screen at once, then tells the tutor
+        to read it. The screen never waits for the tutor to decide to ask. Ignored unless a focused test question has been graded."""
+        ctx = self.ctx
+        if ctx.focus_topic_id is None or ctx.mode not in ("learn", "test", "revise"):
+            return
+        if ctx.current_question_id and not any(r["question_id"] == ctx.current_question_id for r in ctx.results):
+            return   # that question has no grade yet: nothing to move on from
+        out = await ask_quiz_question(ctx)
+        if out.get("available"):
+            options = " ".join(out["options"])
+            note = (f'[The student pressed Next. Question {out.get("question_number")} of {out.get("of")} is already on their screen: '
+                    f'"{out["question"]}" Options: {options}. The previous question is finished and its right answer was shown, so never go back to it '
+                    'and never say "try again". Say one short line to move on, then read this question and its four options aloud.]')
+        else:
+            note = ("[The student pressed Next but there are no more questions. The test is finished: give the short spoken summary now, "
+                    "then call get_mission.]")
+        await session.send_realtime_input(text=note)
+
+    async def _send_photo(self, session, data: dict):
+        """A photo from the student's camera or files ("snap a doubt"), sent as a normal user turn (image + instruction).
+
+        Not as a realtime video frame: Gemini Live ignores a single frame sent that way ("I cannot see the image"),
+        checked against the real API; a client-content turn with the image part is seen and read correctly."""
+        mime = str(data.get("mime", ""))
+        try:
+            raw = base64.b64decode(str(data.get("data", "")), validate=True)
+        except (binascii.Error, ValueError):
+            raw = b""
+        if mime not in PHOTO_TYPES or not raw or len(raw) > MAX_PHOTO_BYTES:
+            await self.emit({"type": "error", "code": "bad_photo", "retryable": False, "message": ERROR_MESSAGES["bad_photo"]})
+            return
+        note = " ".join(str(data.get("note", "")).split())[:300]
+        instruction = ("[The student just showed you this photo (a textbook page, notes or a question). Look at it carefully. "
+                       "Say in one line what you see, then help with it: if it is a question, guide them to solve it step by "
+                       "step; use show_board for any formula or working." + (f' The student said: "{note}"' if note else "") + "]")
+        await session.send_client_content(
+            turns=types.Content(role="user", parts=[types.Part.from_bytes(data=raw, mime_type=mime), types.Part(text=instruction)]),
+            turn_complete=True)
+
+    async def _save_ending(self):
+        await self._final("user")
+        await self._final("tutor")
+        self.closed = True       # nothing more goes to the browser; what is left is saving what happened
+        sql, args = "UPDATE voice_sessions SET ended_at = CURRENT_TIMESTAMP, turns = ? WHERE id = ?", (self.turns, self.session_id)
+        try:
+            await asyncio.to_thread(db.execute, sql, args)   # normally off the event loop, which also answers every voice socket
+        except RuntimeError:   # the executor is already shutting down (server stopping): write it directly, it is one tiny UPDATE
+            db.execute(sql, args)
+
+    def restore(self, state: dict) -> None:
+        """Pick a dropped call up again: the questions asked, graded answers, viva marks and debate rounds come back."""
+        for name in RESUME_FIELDS:
+            if name in state:
+                setattr(self.ctx, name, state[name])
+        self.resumed = True
+
+    def _keep_for_resume(self) -> None:
+        """A call that ended without the student ending it (their connection dropped, or ours did) can be resumed."""
+        if self.ended_by_student:
+            return
+        ctx = self.ctx
+        if not (ctx.results or ctx.viva_answers or ctx.debate_rounds or ctx.asked_ids or self.turns):
+            return
+        _resumable[self.token] = (time.monotonic() + RESUME_SECONDS, self.user_id,
+                                  {name: getattr(ctx, name) for name in RESUME_FIELDS})
+
+    def _client_gone(self) -> bool:
+        return self.ws.client_state != WebSocketState.CONNECTED or self.ws.application_state != WebSocketState.CONNECTED
+
+    def resume_message(self) -> str:
+        """What to tell the tutor after a reconnect so it carries on instead of starting over."""
+        lang = LANGUAGE_NAMES.get(self.language, "Hinglish")
+        ctx, topic = self.ctx, (self.focus_topic or {}).get("topic_name")
+        facts = []
+        if topic:
+            facts.append(f'The topic is "{topic}".')
+        if self.mode in ("learn", "test", "revise") and self.focus_topic:
+            right = sum(1 for r in ctx.results if r["is_correct"])
+            facts.append(f"{len(ctx.results)} of {ctx.test_total} test questions are already graded ({right} right); do not ask those again.")
+            waiting = ctx.current_question
+            if waiting and ctx.current_question_id and not any(r["question_id"] == ctx.current_question_id for r in ctx.results):
+                facts.append(f'Question {waiting["number"]} is still waiting for the student\'s answer: "{waiting["question"]}" '
+                             f'with options {"; ".join(waiting["options"])}. Read it again briefly and wait for their answer.')
+        elif self.mode == "viva":
+            marks = ", ".join(f'{a["mark"]}' for a in ctx.viva_answers) or "none yet"
+            facts.append(f"{len(ctx.viva_answers)} of {VIVA_QUESTIONS} viva questions are marked (marks: {marks}).")
+            if ctx.viva_question:
+                facts.append(f'The question waiting for an answer is: "{ctx.viva_question}". Repeat it briefly and wait.')
+        elif self.mode == "debate" and self.debate:
+            facts.append(f'Debate motion: "{self.debate["motion"] or "the one you chose"}". You argue {self.debate["side"]}. '
+                         f"{len(ctx.debate_rounds)} of the student's arguments are already scored.")
+        return (f"[The connection dropped for a moment and is back. Say one short line in {lang} that you are back, then carry on "
+                f"exactly where you were. Do not start over and do not repeat what is already done. {' '.join(facts)}]")
+
+    async def _connected(self, resume: bool):
+        """One connection to Gemini, from handshake to the end of the call (or until it drops, which raises)."""
+        prompt = build_system_prompt(self.language, self.topics, self.mode, self.focus_topic, self.debate, self.tutor)
+        resume = resume or self.resumed
+        async with self.connect(prompt, tools_for(self.mode), voice=voice_for(self.tutor)) as session:
+            if resume:
+                await self.emit({"type": "session", "id": self.token})
+                await session.send_realtime_input(text=self.resume_message())
+            else:
+                await self.emit({"type": "session", "id": self.token})
+                if self.focus_topic and self.mode in ("learn", "test"):
+                    await self.emit({"type": "phase", "phase": "teaching" if self.mode == "learn" else "test",
+                                     "topic": self.focus_topic["topic_name"]})
+                elif self.focus_topic and self.mode == "debate" and self.debate:
+                    await self.emit({"type": "phase", "phase": "debate", "topic": self.focus_topic["topic_name"],
+                                     "side": self.debate["side"], "motion": self.debate["motion"],
+                                     "style": self.debate.get("style", "tough")})
+                elif self.focus_topic and self.mode in ("viva", "revise"):
+                    await self.emit({"type": "phase", "phase": self.mode, "topic": self.focus_topic["topic_name"]})
+                await session.send_realtime_input(text=opening_message(self.language, self.mode, self.focus_topic))
+            remaining = max(1.0, settings.session_cap_seconds - (time.monotonic() - self.started))
+            tasks = [asyncio.create_task(self._gemini_to_browser(session)),
+                     asyncio.create_task(self._browser_to_gemini(session)),
+                     asyncio.create_task(asyncio.sleep(remaining))]
+            try:
+                done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                for t in done:
+                    if t is tasks[2]:
+                        await self.emit({"type": "error", "code": "session_limit", "retryable": False,
+                                         "message": ERROR_MESSAGES["session_limit"]})
+                    else:
+                        exc = t.exception()
+                        if exc is not None and not isinstance(exc, _SessionEnded):
+                            raise exc
+            finally:
+                for t in tasks:
+                    t.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def run(self):
+        self.session_id = await asyncio.to_thread(
+            db.execute, "INSERT INTO voice_sessions (user_id, mode, language, study_mode, topic_id) VALUES (?, ?, ?, ?, ?)",
+            (self.user_id, "gemini-live", self.language, self.mode, self.focus_topic["id"] if self.focus_topic else None))
+        try:
+            attempt = 0
+            while True:
+                try:
+                    await self._connected(resume=attempt > 0)
+                    break
+                except Exception as exc:  # noqa: BLE001 - classified below; nothing raw reaches the browser
+                    log.exception("Live session failed")
+                    if self._client_gone():
+                        break
+                    code, retryable = classify_error(exc)
+                    out_of_time = time.monotonic() - self.started >= settings.session_cap_seconds
+                    if retryable and attempt < RECONNECTS and not out_of_time:
+                        attempt += 1   # one transparent retry: the tutor is told where the lesson was and carries on
+                        await self._final("user")
+                        await self._final("tutor")
+                        await self.emit({"type": "reconnecting", "attempt": attempt})
+                        await asyncio.sleep(1)
+                        continue
+                    await self.emit({"type": "error", "code": code, "retryable": retryable, "message": ERROR_MESSAGES[code]})
+                    break
+        finally:
+            self._keep_for_resume()
+            # shielded: if this handler is cancelled (server shutdown, a dropped connection) the end time and the turn
+            # count are still written, so the session is never left looking unfinished
+            await asyncio.shield(self._save_ending())
+
+
+class _SessionEnded(Exception):
+    pass

@@ -1,0 +1,252 @@
+// The one pure function that decides how state changes. No DOM, no network, no timers: easy to test.
+import { clampQuestion } from '../lib/question-count.js';
+import { ActionType as A } from './actions.js';
+import { LANGUAGES, VOICE_STATUS, SESSION_MODE } from '../lib/protocol.js';
+
+const emptySession = () => ({
+  mode: SESSION_MODE.FREE,
+  topicId: null,
+  phase: null,        // {phase: 'teaching'|'test'|'summary'|'debate', topic, side?, motion?} (side = the side the tutor argues)
+  messages: [],       // [{role: 'user'|'tutor', text, final, cut?}]
+  emotion: null,      // latest tone reading
+  question: null,     // quiz question currently on screen
+  result: null,       // grade of that question
+  summary: null,      // end-of-test summary
+  boards: [],         // whiteboard cards shown this session, oldest first (at most MAX_BOARDS)
+  boardIndex: -1,     // which board is on screen; -1 = none
+  viva: null,         // viva: {question, marks: [{number, mark, out_of, feedback}], report}
+  debateScores: [],   // debate: one score per student argument
+  verdict: null,      // debate: the final verdict
+  mission: null,      // the mission Eklavya gave at the end of this session (shown in Study)
+  lost: null,         // {code, retryable} when the call dropped and can be picked up again
+  live: { ready: false, text: false },   // ready: the Gemini link is up (the socket alone is not enough); text: the session carries on by typing
+});
+
+export const MAX_BOARDS = 12;
+
+export const VIEWS = Object.freeze({ TODAY: 'today', LIBRARY: 'library', STUDY: 'study', PROGRESS: 'progress', ASK: 'ask', GROUPS: 'groups', FLASHCARDS: 'flashcards' });
+export const THEMES = Object.freeze({ SYSTEM: 'system', LIGHT: 'light', DARK: 'dark' });
+
+const initialUi = () => ({
+  view: VIEWS.TODAY,          // which section is showing (on wide screens the library is always visible)
+  librarySearch: '',
+  collapsedDocs: {},          // {documentId: true} for notes whose topic list is folded
+  theme: THEMES.SYSTEM,
+  language: LANGUAGES.HINGLISH,   // tutor language; Hindi also switches the interface labels to Hindi
+  captions: true,            // big live captions of what Eklavya says: on until the student turns them off (the choice is remembered)
+  onboarding: false,         // the first-run guide is open
+  celebration: null,         // {id, text}: the latest win to celebrate
+});
+
+export const initialState = Object.freeze({
+  ui: initialUi(),
+  voiceStatus: VOICE_STATUS.IDLE,
+  banner: null,
+  toasts: [],
+  dashboard: null,
+  mission: null,
+  selectedTopicId: null,
+  topicDetail: null,
+  session: emptySession(),
+  today: null,        // GET /api/today
+  history: null,      // GET /api/history
+  plan: null,         // GET /api/plan
+  conceptMap: null,   // GET /api/concept-map
+  flashcards: { topicId: null, cards: [] },
+});
+
+/** Dashboard and server events spell mission fields differently; the UI uses one shape. */
+export function normalizeMission(m) {
+  if (!m) return null;
+  return {
+    title: m.title ?? m.mission_title ?? '',
+    duration_minutes: m.duration_minutes ?? 15,
+    priority: m.priority ?? '',
+    reason: m.reason ?? '',
+    tasks: m.tasks ?? [],
+  };
+}
+
+const withSession = (state, patch) => ({ ...state, session: { ...state.session, ...patch } });
+const withUi = (state, patch) => ({ ...state, ui: { ...state.ui, ...patch } });
+
+const lastOpenIndex = (messages, role) => {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === role && !messages[i].final) return i;
+  }
+  return -1;
+};
+
+/**
+ * A new board goes on screen. A board with the same title and kind as one already shown means the tutor is
+ * updating it (next step, filled-in result, or going back to it), so that card is replaced and brought into view.
+ */
+function showBoard(state, board) {
+  const { boards } = state.session;
+  const same = boards.findIndex((b) => b.title === board.title && b.kind === board.kind);
+  if (same >= 0) return withSession(state, { boards: boards.map((b, i) => (i === same ? board : b)), boardIndex: same });
+  const next = [...boards, board].slice(-MAX_BOARDS);
+  return withSession(state, { boards: next, boardIndex: next.length - 1 });
+}
+
+/** Live transcript: chunks (final=false) grow the open bubble; the final text replaces it. */
+function receiveTranscript(state, { role, text, final, image, replace, local, whole, retry }) {
+  // a new bubble from one speaker ends the other speaker's open bubble, so later chunks of that speaker start a new
+  // one below instead of growing the old one above (the order of the conversation is the order things happened)
+  const other = role === 'user' ? 'tutor' : 'user';
+  const closeOther = (list) => {
+    const i = lastOpenIndex(list, other);
+    return i < 0 ? list : list.map((m, k) => (k === i ? { ...m, final: true } : m));
+  };
+  // the local first line only stands in until Eklavya's own words arrive: then it goes, so the greeting is never said twice
+  const messages = role === 'tutor' && !local && text && !image ? state.session.messages.filter((m) => !m.local) : state.session.messages;
+  if (local) return withSession(state, { messages: [...closeOther(messages), { role, text, final: true, local: true }] });
+  if (image) return withSession(state, { messages: [...closeOther(messages), { role, text, final: true, image }] });   // a shared photo
+  let open = lastOpenIndex(messages, role);
+  // one tutor turn is ONE bubble: if the server closed the bubble early (an interruption, a pause around a tool call) and Eklavya carries on
+  // before the turn is complete and before the student has said anything, the words join that bubble instead of starting a fragment of 1-3 words
+  const last = messages.at(-1);
+  const rejoin = open < 0 && role === 'tutor' && !whole && text && last?.role === 'tutor' && !last.done && !last.local && !last.image;
+  if (rejoin) open = messages.length - 1;
+  if (final && !text) {   // a turn that turned out empty (e.g. only "<no speech>"): remove the bubble it started
+    return open < 0 ? state : withSession(state, { messages: messages.filter((_, i) => i !== open) });
+  }
+  if (!text) return state;
+  let next;
+  if (open >= 0) {
+    next = messages.map((m, i) => {
+      if (i !== open) return m;
+      const base = rejoin ? `${m.text.trim()} ` : (m.base ?? '');   // what the earlier pieces of this turn said; a replace or a final carries only the new piece
+      const grown = { ...m, text: final || replace ? base + text : m.text + text, final: Boolean(final) };
+      if (base) grown.base = base;
+      if (rejoin) delete grown.cut;
+      return grown;
+    });
+  } else {
+    next = [...closeOther(messages), { role, text, final: Boolean(final), ...(whole ? { done: true } : {}), ...(retry ? { retry: true } : {}) }];
+  }
+  return withSession(state, { messages: next });
+}
+
+export function reducer(state, action) {
+  const { payload } = action;
+  switch (action.type) {
+    case A.VOICE_STATUS_CHANGED:
+      if (payload === state.voiceStatus) return state;
+      return payload === VOICE_STATUS.IDLE
+        ? { ...withSession(state, { phase: null, live: { ready: false, text: false } }), voiceStatus: payload }   // the call is over: the next one starts not ready, and text mode ends
+        : { ...state, voiceStatus: payload };
+
+    case A.BANNER_SET:
+      return payload === state.banner ? state : { ...state, banner: payload || null };
+
+    case A.TOAST_ADDED:
+      return { ...state, toasts: [...state.toasts, payload] };
+    case A.TOAST_REMOVED:
+      return { ...state, toasts: state.toasts.filter((t) => t.id !== payload) };
+
+    case A.DASHBOARD_LOADED:
+      return { ...state, dashboard: payload, mission: payload.mission ? normalizeMission(payload.mission) : state.mission };
+
+    case A.TOPIC_SELECTED: {   // picking a topic takes the student to the Study section
+      const changed = state.selectedTopicId !== payload;
+      // a different topic while no call is running: the old topic's conversation, boards and cards are not shown under it
+      const clean = changed && state.voiceStatus === VOICE_STATUS.IDLE ? { session: emptySession() } : {};
+      return withUi({ ...state, ...clean, selectedTopicId: payload, topicDetail: changed ? null : state.topicDetail }, { view: VIEWS.STUDY });
+    }
+    case A.TOPIC_LOADED:
+      return payload.topic_id === state.selectedTopicId ? { ...state, topicDetail: payload } : state;
+
+    case A.NOTES_RESET:
+      return withUi({ ...state, banner: null, mission: null, selectedTopicId: null, topicDetail: null, session: emptySession(),
+        conceptMap: null, flashcards: { topicId: null, cards: [] } }, { librarySearch: '', collapsedDocs: {} });
+
+    case A.SESSION_STARTED:
+      return withUi({ ...state, banner: null, session: { ...emptySession(), mode: payload.mode, topicId: payload.topicId } }, { view: VIEWS.STUDY });
+
+    case A.LIVE_READY:
+      return state.session.live.ready ? state : withSession(state, { live: { ...state.session.live, ready: true } });
+    case A.TEXT_MODE_STARTED:
+      return withSession(state, { live: { ready: false, text: true }, lost: null });
+    case A.CONNECTION_LOST:
+      return withSession(state, { lost: payload });
+    case A.SESSION_RESUMED:
+      return withSession(state, { lost: null });
+    case A.TRANSCRIPT_RECEIVED:
+      return receiveTranscript(state, payload);
+    case A.TURN_ENDED: {
+      const i = state.session.messages.findLastIndex((m) => m.role === 'tutor' && !m.done);
+      return i < 0 || i !== state.session.messages.length - 1 ? state : withSession(state, { messages: state.session.messages.map((m, k) => (k === i ? { ...m, final: true, done: true } : m)) });
+    }
+    case A.TURN_INTERRUPTED: {
+      const open = lastOpenIndex(state.session.messages, 'tutor');
+      if (open < 0) return state;
+      return withSession(state, { messages: state.session.messages.map((m, i) => (i === open ? { ...m, final: true, cut: true } : m)) });
+    }
+
+    case A.EMOTION_REPORTED:
+      return withSession(state, { emotion: payload });
+    case A.PHASE_CHANGED:
+      return withSession(state, { phase: { phase: payload.phase, topic: payload.topic, ...(payload.side ? { side: payload.side, motion: payload.motion } : {}) } });
+    case A.QUESTION_ASKED:
+      return withSession(state, { question: clampQuestion(payload), result: null, summary: null });
+    case A.ANSWER_GRADED:
+      return withSession(state, { result: payload });
+    case A.TEST_SUMMARIZED:
+      return withSession(state, { summary: payload });
+    case A.BOARD_SHOWN:
+      return showBoard(state, payload);
+    case A.BOARD_PICKED:
+      return Number.isInteger(payload) && payload >= 0 && payload < state.session.boards.length && payload !== state.session.boardIndex
+        ? withSession(state, { boardIndex: payload }) : state;
+    case A.VIVA_QUESTION_ASKED:
+      return withSession(state, { viva: { marks: [], report: null, ...state.session.viva, question: payload } });
+    case A.VIVA_MARKED: {
+      const viva = state.session.viva ?? { question: null, marks: [], report: null };
+      return withSession(state, { viva: { ...viva, marks: [...viva.marks.filter((m) => m.number !== payload.number), payload] } });
+    }
+    case A.VIVA_REPORTED:
+      return withSession(state, { viva: { marks: [], ...state.session.viva, question: null, report: payload } });
+    case A.DEBATE_SCORED:
+      return withSession(state, { debateScores: [...state.session.debateScores, payload] });
+    case A.DEBATE_JUDGED:
+      return withSession(state, { verdict: payload });
+    case A.TODAY_LOADED:
+      return { ...state, today: payload };
+    case A.HISTORY_LOADED:
+      return { ...state, history: payload };
+    case A.PLAN_LOADED:
+      return { ...state, plan: payload };
+    case A.CONCEPT_MAP_LOADED:
+      return { ...state, conceptMap: payload };
+    case A.FLASHCARDS_LOADED:
+      return { ...state, flashcards: { topicId: payload.topicId ?? null, cards: payload.cards ?? [] } };
+    case A.CAPTIONS_TOGGLED:
+      return withUi(state, { captions: !state.ui.captions });
+    case A.LANGUAGE_CHANGED:
+      return Object.values(LANGUAGES).includes(payload) && payload !== state.ui.language ? withUi(state, { language: payload }) : state;
+    case A.ONBOARDING_SET:
+      return Boolean(payload) === state.ui.onboarding ? state : withUi(state, { onboarding: Boolean(payload) });
+    case A.CELEBRATED:
+      return withUi(state, { celebration: payload });
+    case A.MISSION_RECEIVED: {
+      const mission = normalizeMission(payload);
+      return { ...withSession(state, { mission }), mission };
+    }
+
+    case A.VIEW_CHANGED:
+      return Object.values(VIEWS).includes(payload) && payload !== state.ui.view ? withUi(state, { view: payload }) : state;
+    case A.LIBRARY_SEARCHED:
+      return payload === state.ui.librarySearch ? state : withUi(state, { librarySearch: payload });
+    case A.DOCUMENT_TOGGLED: {
+      const collapsed = { ...state.ui.collapsedDocs };
+      if (collapsed[payload]) delete collapsed[payload]; else collapsed[payload] = true;
+      return withUi(state, { collapsedDocs: collapsed });
+    }
+    case A.THEME_CHANGED:
+      return Object.values(THEMES).includes(payload) && payload !== state.ui.theme ? withUi(state, { theme: payload }) : state;
+
+    default:
+      return state;
+  }
+}
