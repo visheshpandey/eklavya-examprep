@@ -143,3 +143,44 @@ def test_time_travel_toggle():
 def test_unknown_student_is_404():
     assert client.get("/api/practice/next", params={"student_id": 99999}).status_code == 404
     assert client.get("/api/health").json()["status"] == "ok"
+
+
+def test_new_student_joins_class_and_shows_on_heatmap():
+    client.post("/api/demo/seed")
+    sid = client.post("/api/students", json={"name": "Newcomer"}).json()
+    assert sid["class_section"] == "10-B"
+    ov = client.get("/api/teacher/overview", params={"class_section": "10-B"}).json()
+    assert "Newcomer" in [r["name"] for r in ov["heatmap"]] and ov["student_count"] == 7
+
+
+def test_generated_question_never_repeats_a_diagnostic_or_seen_stem(monkeypatch):
+    diag_stem = content.diagnostic()[0]["stem"]
+    monkeypatch.setattr(gemini, "llm_json", lambda *a, **k: {"stem": diag_stem, "options": ["a", "b", "c", "d"], "correct_index": 0})
+    q = question_gen.generate("L1", 1, [], [])
+    assert q["stem"] != diag_stem or q["source"] == "bank"   # a repeat is rejected; only the last-resort bank may reuse one
+    seen = [content.diagnostic()[i]["stem"] for i in range(14)]
+    monkeypatch.setattr(gemini, "llm_json", fake_question)
+    assert question_gen.generate("C6", 2, [], seen)["stem"] not in seen
+
+
+def test_formula_and_unit_misconceptions_are_candidates_for_charge():
+    from app.ps02 import misconception
+    ids = {m["id"] for m in misconception.candidates("C1")}
+    assert {"MC21", "MC22"} <= ids
+    q = content.diagnostic()[7]   # D08 on charge & current
+    d = misconception.heuristic(q, 0, "charge = current / time so 2/10 = 0.2 C", "C1", None)
+    assert d.misconception_id == "MC21"
+
+
+def test_unknown_misconception_still_returns_specific_label_and_fix(monkeypatch):
+    monkeypatch.setattr(gemini, "llm_json", lambda *a, **k: {"misconception_id": "MC_UNKNOWN", "confidence": 0.6, "evidence": "added 2 and 10", "is_careless_error": False,
+                                                              "reasoning_sound": False, "new_label": "Added instead of multiplied", "fix": "Charge is current times time.",
+                                                              "feedback_hinglish": "Aapne 2 aur 10 jod diye.", "feedback_english": "You added 2 and 10."})
+    from app.ps02 import misconception
+    r = misconception.classify(content.diagnostic()[7], 0, "I added 2 and 10", "C1", None)
+    assert r["label"] == "Added instead of multiplied" and r["fix"]
+
+
+def test_prefetch_endpoint():
+    sid = new_student()
+    assert client.post("/api/practice/prefetch", params={"student_id": sid}).json()["started"] is True

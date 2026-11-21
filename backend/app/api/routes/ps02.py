@@ -79,6 +79,14 @@ def practice_next(student_id: int, review: bool = False, concept_id: str | None 
     return service.next_question(student_id, review=review, concept_id=concept_id)
 
 
+@router.post("/api/practice/prefetch")
+def practice_prefetch(student_id: int):
+    """Start generating the first question in the background (called when the map loads), so Practice opens instantly."""
+    _student(student_id)
+    service._prefetch_after(student_id)
+    return {"started": True}
+
+
 @router.post("/api/practice/answer")
 def practice_answer(body: AnswerIn):
     _student(body.student_id)

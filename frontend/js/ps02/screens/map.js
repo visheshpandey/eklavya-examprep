@@ -145,4 +145,5 @@ export async function mapScreen(root, ctx) {
         dueCount > 0 && h('a', { class: 'btn', href: '#/reviews' }, `${dueCount} review${dueCount > 1 ? 's' : ''} due`))),
     h('div', { class: 'map-grid' }, h('div', { class: 'card graph-card' }, svg, list), panel));
   if (reveal) history.replaceState(null, '', '#/map');
+  if (!teacherView) api(`/api/practice/prefetch?${qs({ student_id: studentId })}`, { method: 'POST', timeout: 20000 }).catch(() => {});   // warm the first practice question
 }

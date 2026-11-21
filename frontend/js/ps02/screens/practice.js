@@ -111,7 +111,11 @@ export async function practice(root, ctx) {
       try {
         const a = await api('/api/practice/answer', { method: 'POST', body: { student_id: student.id, question_id: q.question_id, chosen_index: chosen, elapsed_seconds: (Date.now() - started) / 1000 } });
         if (!ctx.live()) return;
-        options.forEach((o, k) => { o.classList.toggle('opt-correct', k === a.correct_index); o.classList.toggle('opt-wrong', k === chosen && !a.correct); });
+        options.forEach((o, k) => {
+          const right = k === a.correct_index, wrong = k === chosen && !a.correct;
+          o.classList.toggle('opt-correct', right); o.classList.toggle('opt-wrong', wrong);
+          if (right || wrong) o.querySelector('.opt-key').textContent = right ? '✓' : '✗';
+        });
         submit.remove();
         const deltas = deltaList(a.mastery_changes, { title: a.correct ? 'Your mastery' : 'Your mastery (we’ll refine this after your explanation)' });
         feedback.replaceChildren(
@@ -188,8 +192,10 @@ export async function practice(root, ctx) {
           h('div', { class: 'fix' }, h('b', null, 'The fix: '), r.misconception.correction),
           r.misconception.analogy && h('p', { class: 'analogy' }, h('b', null, 'Think of it like this: '), r.misconception.analogy));
       } else {
-        card.replaceChildren(h('p', { class: 'eyebrow' }, d.new_label || 'Reasoning checked'), h('h2', null, r.lucky_guess ? 'Right answer, shaky reasoning' : 'Let’s tighten this up'),
+        card.replaceChildren(h('p', { class: 'eyebrow' }, r.lucky_guess ? 'Reasoning check' : 'A new pattern, not in our list yet'),
+          h('h2', null, r.lucky_guess ? 'Right answer, shaky reasoning' : (d.new_label || 'Let’s tighten this up')),
           d.evidence && h('blockquote', { class: 'quote' }, h('small', null, 'You said'), `“${d.evidence}”`), h('p', null, feedback),
+          d.fix && h('div', { class: 'fix' }, h('b', null, 'The fix: '), d.fix),
           r.lucky_guess && h('p', { class: 'muted small' }, 'Because the reasoning was unsure, this answer raised your mastery less than usual.'));
       }
     };

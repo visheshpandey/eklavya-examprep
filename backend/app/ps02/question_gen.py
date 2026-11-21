@@ -72,7 +72,7 @@ def _prompt(concept_id: str, difficulty: int, active_mcs: list[str], recent_stem
     pool += [mcs[i] for i in active_mcs if i in mcs and mcs[i] not in pool]
     listing = "\n".join(f'- {m["id"]}: {m["description"]}' for m in pool) or "- (none known; use MC_UNKNOWN)"
     formulas = ", ".join(c["key_formulas"]) or "none"
-    avoid = "\n".join(f"- {s}" for s in recent_stems[-5:]) or "- (none)"
+    avoid = "\n".join(f"- {s}" for s in recent_stems[:8]) or "- (none)"
     return (f"Concept {concept_id}: {c['name']} ({c['chapter']}). {c['description']}\nKey formulas: {formulas}\n"
             f"Target difficulty: {difficulty}\nMisconceptions to build wrong options from:\n{listing}\n"
             f"The student currently holds: {', '.join(active_mcs) or 'nothing recorded'}\nStems already used (do not repeat):\n{avoid}")
@@ -92,6 +92,7 @@ def _shuffle(q: GeneratedQuestion) -> dict:
 def generate(concept_id: str, difficulty: int, active_mcs: list[str] | None = None, recent_stems: list[str] | None = None) -> dict:
     """Return a validated question dict. Tries the LLM twice; on failure falls back to a cached or hand-written question (``source`` says which)."""
     active_mcs, recent_stems = active_mcs or [], recent_stems or []
+    seen = {s.strip() for s in recent_stems} | {q["stem"].strip() for q in content.diagnostic()}   # never repeat a stem the student saw, nor a diagnostic one
     prompt = _prompt(concept_id, difficulty, active_mcs, recent_stems)
     for attempt in (1, 2):
         try:
@@ -99,7 +100,7 @@ def generate(concept_id: str, difficulty: int, active_mcs: list[str] | None = No
                                   timeout_ms=GEN_TIMEOUT_MS)
             q = GeneratedQuestion(**raw)
             q.concept_id, q.difficulty = concept_id, max(1, min(3, int(q.difficulty or difficulty)))
-            if q.stem.strip() in recent_stems:
+            if q.stem.strip() in seen:
                 continue
             out = _shuffle(q)
             out["source"] = "ai"

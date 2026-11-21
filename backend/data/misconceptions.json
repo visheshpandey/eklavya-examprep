@@ -1,25 +1,379 @@
 {
   "misconceptions": [
-    {"id": "MC01", "concept_ids": ["C1", "C5"], "label": "Current gets used up", "description": "Student believes current is consumed by a bulb or resistor, so less current leaves than enters.", "telltale_phrases": ["the bulb uses up the current", "current is consumed by the resistor", "bulb mein current kha jaata hai", "current kam ho jaata hai bulb ke baad", "current khatam ho jata hai"], "correction": "Current is the flow of charge and charge is not used up; the same current leaves a bulb as enters it. What the bulb uses is energy.", "analogy": "Water pipe through a water-wheel: same amount of water flows out; the wheel only takes energy from it."},
-    {"id": "MC02", "concept_ids": ["C3"], "label": "Battery gives fixed current", "description": "Student thinks a battery supplies the same current no matter what is connected.", "telltale_phrases": ["battery always gives the same current", "current is fixed by the cell", "battery se hamesha utna hi current aata hai"], "correction": "A cell fixes the voltage, not the current. Current = V/R, so it changes when the resistance of the circuit changes.", "analogy": "A water tank gives fixed pressure; the flow depends on how narrow the pipe is."},
-    {"id": "MC03", "concept_ids": ["C6"], "label": "More parallel resistors = more resistance", "description": "Student believes adding resistors in parallel increases the total resistance.", "telltale_phrases": ["more resistors means more resistance", "parallel adds up resistance", "resistance badh jaayega kyunki aur resistor lage hain", "total resistance sum hoga"], "correction": "Each new parallel branch gives current one more path, so the total resistance goes down and is always less than the smallest branch.", "analogy": "Opening extra billing counters in a shop makes it easier, not harder, for the queue to move."},
-    {"id": "MC04", "concept_ids": ["C2"], "label": "Voltage flows like current", "description": "Student treats voltage as something that flows through the wire, rather than a difference across two points.", "telltale_phrases": ["voltage flows through the wire", "voltage passes through the bulb", "voltage bahta hai wire mein", "voltage bulb ke through jaata hai"], "correction": "Potential difference is measured across two points; charge flows, voltage does not. Voltage is the push, current is the flow.", "analogy": "Height difference of a waterfall is not the water itself; it is what makes the water flow."},
-    {"id": "MC05", "concept_ids": ["C4"], "label": "Resistance depends only on material", "description": "Student thinks resistance depends only on the material and ignores length and cross-section area.", "telltale_phrases": ["resistance depends only on material", "length does not matter", "copper hai to resistance same rahega", "thickness se kuch farak nahi padta"], "correction": "R = ρl/A. Resistance increases with length and decreases with area; the material only sets ρ.", "analogy": "A long narrow corridor is harder to walk through in a crowd than a short wide one, though the floor is the same."},
-    {"id": "MC06", "concept_ids": ["C7", "C5"], "label": "Higher wattage always brighter", "description": "Student believes a higher-wattage bulb always glows brighter, even in series.", "telltale_phrases": ["100 W bulb is always brighter", "more watt means more bright", "jyada watt wala hamesha tej jalega", "series mein bhi 100W zyada chamkega"], "correction": "A bulb's rating is for its rated voltage. In series the same current flows, so the bulb with larger resistance (the lower-wattage one) glows brighter, since P = I²R.", "analogy": "A strong runner in a relay still must carry the same baton at the same pace as the others."},
-    {"id": "MC07", "concept_ids": ["C3"], "label": "Ohmic resistance changes with voltage", "description": "Student thinks the resistance of an ohmic conductor increases or decreases when the applied voltage changes.", "telltale_phrases": ["more voltage means more resistance", "resistance increases as V increases", "voltage badhane se resistance badh jaata hai"], "correction": "For an ohmic conductor at constant temperature, V/I is constant, so resistance stays the same. Doubling V doubles I.", "analogy": "A straight road keeps the same width however fast cars drive on it."},
-    {"id": "MC08", "concept_ids": ["L2"], "label": "Image type confusion in mirrors", "description": "Student thinks all mirror images are virtual or that images formed behind a mirror are real.", "telltale_phrases": ["all images in a mirror are virtual", "image behind the mirror is real", "mirror ki image hamesha virtual hoti hai", "peeche banne wali image real hoti hai"], "correction": "A real image forms where rays actually meet and can be caught on a screen; a virtual image forms behind the mirror where rays only appear to meet. A concave mirror can form both.", "analogy": "A real image is like a projector picture on a wall; a virtual image is like the 'person' you see behind a bathroom mirror."},
-    {"id": "MC09", "concept_ids": ["L3", "L6"], "label": "Ignoring sign convention", "description": "Student ignores the Cartesian sign convention, e.g. takes the focal length of a concave mirror as positive or uses object distance as positive.", "telltale_phrases": ["focal length is always positive", "I just put the numbers in", "u ko positive le liya", "sign ki zaroorat nahi, bas values daal di"], "correction": "Distances are measured from the pole in the direction of incident light as positive. For a concave mirror, f and u are negative; for a convex mirror, f is positive.", "analogy": "Like a number line: left of zero and right of zero are opposite directions, so they need opposite signs."},
-    {"id": "MC10", "concept_ids": ["L4"], "label": "Light speeds up in denser medium", "description": "Student believes light travels faster in a denser (higher refractive index) medium.", "telltale_phrases": ["light moves faster in glass", "denser means faster", "ghane medium mein light tez chalti hai", "glass mein speed badh jaati hai"], "correction": "Light slows down in a denser medium since n = c/v; higher n means lower speed v.", "analogy": "Running on a road versus wading through mud: the thicker the medium, the slower you go."},
-    {"id": "MC11", "concept_ids": ["L5"], "label": "Covering half a lens halves the image", "description": "Student thinks covering half the lens removes half the image.", "telltale_phrases": ["half the image will vanish", "cover half the lens and half the picture goes", "aadha lens dhakne se aadhi image gayab"], "correction": "Every part of a lens forms the complete image; covering half only makes the image dimmer, not incomplete.", "analogy": "Cutting a window pane in half does not remove half of the view; it only lets in less light."},
-    {"id": "MC12", "concept_ids": ["L6"], "label": "Longer focal length = more power", "description": "Student believes a lens with a longer focal length is more powerful.", "telltale_phrases": ["longer focal length means more power", "bigger f, bigger power", "focal length zyada hai to power zyada"], "correction": "Power P = 1/f (f in metres). A short focal length bends light strongly, so it means high power.", "analogy": "A sharp turn changes direction more strongly than a gentle curve."},
-    {"id": "MC13", "concept_ids": ["E2"], "label": "Myopia needs convex lens", "description": "Student thinks short-sightedness is corrected with a convex lens.", "telltale_phrases": ["myopia is corrected by convex lens", "nearsighted ko convex lens lagta hai", "myopia mein convex lens use hota hai"], "correction": "In myopia the image forms in front of the retina, so a concave (diverging) lens is used to push the image back onto it. Convex lenses correct hypermetropia.", "analogy": "If the picture lands too early, you need to spread the rays a little first."},
-    {"id": "MC14", "concept_ids": ["E3"], "label": "Prism adds colours", "description": "Student thinks the prism creates or adds colours to white light.", "telltale_phrases": ["prism adds colours to light", "prism rang daalta hai", "glass colours ko paida karta hai"], "correction": "White light already contains all colours; a prism only separates them because each colour bends by a different amount.", "analogy": "A prism is like a sorting machine, not a paint box."},
-    {"id": "MC15", "concept_ids": ["E4"], "label": "Wrong reason for blue sky", "description": "Student thinks the sky is blue because it reflects the sea, or that red light scatters the most.", "telltale_phrases": ["sky is blue because of the ocean", "sea ka reflection hai", "red light scatters the most", "laal rang sabse zyada bikharta hai"], "correction": "Air molecules scatter short wavelengths (blue) far more than long ones (red), so scattered blue light reaches us from all directions.", "analogy": "Tiny ripples scatter small waves more than big ones."},
-    {"id": "MC16", "concept_ids": ["M1"], "label": "Field lines can intersect", "description": "Student thinks magnetic field lines can cross each other.", "telltale_phrases": ["field lines cross at the centre", "lines can intersect", "field lines ek dusre ko kaat sakti hain"], "correction": "Two field lines would give two directions of the field at the crossing point, which is impossible, so field lines never intersect.", "analogy": "Two road signs pointing in different directions at the same spot would leave the driver confused, so a single spot has only one direction."},
-    {"id": "MC17", "concept_ids": ["M2"], "label": "Only magnets make magnetic fields", "description": "Student believes only magnets can produce magnetic fields, not electric currents.", "telltale_phrases": ["only magnets have magnetic fields", "a wire cannot have a magnetic field", "sirf magnet se field banti hai", "taar mein se field nahi nikalti"], "correction": "Oersted showed that a current-carrying wire produces a magnetic field around it, which is why a compass needle deflects near it.", "analogy": "A moving crowd of charges makes a 'wind' of magnetism around the wire, just as a moving fan makes air movement."},
-    {"id": "MC18", "concept_ids": ["M3"], "label": "Force is along the field", "description": "Student believes the force on a current-carrying conductor acts along the direction of the magnetic field.", "telltale_phrases": ["force is in the direction of the field", "force along B", "force field ki direction mein lagta hai", "force B ke saath saath hota hai"], "correction": "The force is perpendicular to both the current and the magnetic field. Use Fleming's left-hand rule: Force, Field, Current are mutually perpendicular.", "analogy": "Like pushing a door sideways with your thumb even though the hinge line and your palm point elsewhere."},
-    {"id": "MC19", "concept_ids": ["M4"], "label": "Earth wire / fuse confusion", "description": "Student thinks the earth wire normally carries current, or that the fuse goes in the neutral wire.", "telltale_phrases": ["earth wire carries current", "fuse goes in neutral wire", "earth wire se current bahta hai", "fuse neutral mein lagta hai"], "correction": "The earth wire carries current only if there is a fault, to protect us from shocks. A fuse is put in the live wire so the circuit breaks before the appliance gets damaged.", "analogy": "Earth wire is the emergency exit that stays empty until a fire; the fuse is the main gate that closes at the entrance."},
-    {"id": "MC20", "concept_ids": ["L1"], "label": "Angles measured from the surface", "description": "Student measures the angle of incidence/reflection from the mirror surface instead of from the normal.", "telltale_phrases": ["angle between ray and mirror", "i measured from the mirror surface", "mirror se angle naapa", "surface se angle liya"], "correction": "Angles of incidence and reflection are always measured from the normal (the line perpendicular to the surface), not from the surface.", "analogy": "Like measuring how far you swing from a straight-up pole, not from the ground."},
-    {"id": "MC_UNKNOWN", "concept_ids": [], "label": "Other / unclear reasoning", "description": "Wrong answer that does not match a known misconception; the classifier may propose a short new label.", "telltale_phrases": [], "correction": "Let's go back to the basic definition and work it through step by step.", "analogy": ""}
+    {
+      "id": "MC01",
+      "concept_ids": [
+        "C1",
+        "C5"
+      ],
+      "label": "Current gets used up",
+      "description": "Student believes current is consumed by a bulb or resistor, so less current leaves than enters.",
+      "telltale_phrases": [
+        "the bulb uses up the current",
+        "current is consumed by the resistor",
+        "bulb mein current kha jaata hai",
+        "current kam ho jaata hai bulb ke baad",
+        "current khatam ho jata hai"
+      ],
+      "correction": "Current is the flow of charge and charge is not used up; the same current leaves a bulb as enters it. What the bulb uses is energy.",
+      "analogy": "Water pipe through a water-wheel: same amount of water flows out; the wheel only takes energy from it."
+    },
+    {
+      "id": "MC02",
+      "concept_ids": [
+        "C3"
+      ],
+      "label": "Battery gives fixed current",
+      "description": "Student thinks a battery supplies the same current no matter what is connected.",
+      "telltale_phrases": [
+        "battery always gives the same current",
+        "current is fixed by the cell",
+        "battery se hamesha utna hi current aata hai"
+      ],
+      "correction": "A cell fixes the voltage, not the current. Current = V/R, so it changes when the resistance of the circuit changes.",
+      "analogy": "A water tank gives fixed pressure; the flow depends on how narrow the pipe is."
+    },
+    {
+      "id": "MC03",
+      "concept_ids": [
+        "C6"
+      ],
+      "label": "More parallel resistors = more resistance",
+      "description": "Student believes adding resistors in parallel increases the total resistance.",
+      "telltale_phrases": [
+        "more resistors means more resistance",
+        "parallel adds up resistance",
+        "resistance badh jaayega kyunki aur resistor lage hain",
+        "total resistance sum hoga"
+      ],
+      "correction": "Each new parallel branch gives current one more path, so the total resistance goes down and is always less than the smallest branch.",
+      "analogy": "Opening extra billing counters in a shop makes it easier, not harder, for the queue to move."
+    },
+    {
+      "id": "MC04",
+      "concept_ids": [
+        "C2"
+      ],
+      "label": "Voltage flows like current",
+      "description": "Student treats voltage as something that flows through the wire, rather than a difference across two points.",
+      "telltale_phrases": [
+        "voltage flows through the wire",
+        "voltage passes through the bulb",
+        "voltage bahta hai wire mein",
+        "voltage bulb ke through jaata hai"
+      ],
+      "correction": "Potential difference is measured across two points; charge flows, voltage does not. Voltage is the push, current is the flow.",
+      "analogy": "Height difference of a waterfall is not the water itself; it is what makes the water flow."
+    },
+    {
+      "id": "MC05",
+      "concept_ids": [
+        "C4"
+      ],
+      "label": "Resistance depends only on material",
+      "description": "Student thinks resistance depends only on the material and ignores length and cross-section area.",
+      "telltale_phrases": [
+        "resistance depends only on material",
+        "length does not matter",
+        "copper hai to resistance same rahega",
+        "thickness se kuch farak nahi padta"
+      ],
+      "correction": "R = ρl/A. Resistance increases with length and decreases with area; the material only sets ρ.",
+      "analogy": "A long narrow corridor is harder to walk through in a crowd than a short wide one, though the floor is the same."
+    },
+    {
+      "id": "MC06",
+      "concept_ids": [
+        "C7",
+        "C5"
+      ],
+      "label": "Higher wattage always brighter",
+      "description": "Student believes a higher-wattage bulb always glows brighter, even in series.",
+      "telltale_phrases": [
+        "100 W bulb is always brighter",
+        "more watt means more bright",
+        "jyada watt wala hamesha tej jalega",
+        "series mein bhi 100W zyada chamkega"
+      ],
+      "correction": "A bulb's rating is for its rated voltage. In series the same current flows, so the bulb with larger resistance (the lower-wattage one) glows brighter, since P = I²R.",
+      "analogy": "A strong runner in a relay still must carry the same baton at the same pace as the others."
+    },
+    {
+      "id": "MC07",
+      "concept_ids": [
+        "C3"
+      ],
+      "label": "Ohmic resistance changes with voltage",
+      "description": "Student thinks the resistance of an ohmic conductor increases or decreases when the applied voltage changes.",
+      "telltale_phrases": [
+        "more voltage means more resistance",
+        "resistance increases as V increases",
+        "voltage badhane se resistance badh jaata hai"
+      ],
+      "correction": "For an ohmic conductor at constant temperature, V/I is constant, so resistance stays the same. Doubling V doubles I.",
+      "analogy": "A straight road keeps the same width however fast cars drive on it."
+    },
+    {
+      "id": "MC08",
+      "concept_ids": [
+        "L2"
+      ],
+      "label": "Image type confusion in mirrors",
+      "description": "Student thinks all mirror images are virtual or that images formed behind a mirror are real.",
+      "telltale_phrases": [
+        "all images in a mirror are virtual",
+        "image behind the mirror is real",
+        "mirror ki image hamesha virtual hoti hai",
+        "peeche banne wali image real hoti hai"
+      ],
+      "correction": "A real image forms where rays actually meet and can be caught on a screen; a virtual image forms behind the mirror where rays only appear to meet. A concave mirror can form both.",
+      "analogy": "A real image is like a projector picture on a wall; a virtual image is like the 'person' you see behind a bathroom mirror."
+    },
+    {
+      "id": "MC09",
+      "concept_ids": [
+        "L3",
+        "L6"
+      ],
+      "label": "Ignoring sign convention",
+      "description": "Student ignores the Cartesian sign convention, e.g. takes the focal length of a concave mirror as positive or uses object distance as positive.",
+      "telltale_phrases": [
+        "focal length is always positive",
+        "I just put the numbers in",
+        "u ko positive le liya",
+        "sign ki zaroorat nahi, bas values daal di"
+      ],
+      "correction": "Distances are measured from the pole in the direction of incident light as positive. For a concave mirror, f and u are negative; for a convex mirror, f is positive.",
+      "analogy": "Like a number line: left of zero and right of zero are opposite directions, so they need opposite signs."
+    },
+    {
+      "id": "MC10",
+      "concept_ids": [
+        "L4"
+      ],
+      "label": "Light speeds up in denser medium",
+      "description": "Student believes light travels faster in a denser (higher refractive index) medium.",
+      "telltale_phrases": [
+        "light moves faster in glass",
+        "denser means faster",
+        "ghane medium mein light tez chalti hai",
+        "glass mein speed badh jaati hai"
+      ],
+      "correction": "Light slows down in a denser medium since n = c/v; higher n means lower speed v.",
+      "analogy": "Running on a road versus wading through mud: the thicker the medium, the slower you go."
+    },
+    {
+      "id": "MC11",
+      "concept_ids": [
+        "L5"
+      ],
+      "label": "Covering half a lens halves the image",
+      "description": "Student thinks covering half the lens removes half the image.",
+      "telltale_phrases": [
+        "half the image will vanish",
+        "cover half the lens and half the picture goes",
+        "aadha lens dhakne se aadhi image gayab"
+      ],
+      "correction": "Every part of a lens forms the complete image; covering half only makes the image dimmer, not incomplete.",
+      "analogy": "Cutting a window pane in half does not remove half of the view; it only lets in less light."
+    },
+    {
+      "id": "MC12",
+      "concept_ids": [
+        "L6"
+      ],
+      "label": "Longer focal length = more power",
+      "description": "Student believes a lens with a longer focal length is more powerful.",
+      "telltale_phrases": [
+        "longer focal length means more power",
+        "bigger f, bigger power",
+        "focal length zyada hai to power zyada"
+      ],
+      "correction": "Power P = 1/f (f in metres). A short focal length bends light strongly, so it means high power.",
+      "analogy": "A sharp turn changes direction more strongly than a gentle curve."
+    },
+    {
+      "id": "MC13",
+      "concept_ids": [
+        "E2"
+      ],
+      "label": "Myopia needs convex lens",
+      "description": "Student thinks short-sightedness is corrected with a convex lens.",
+      "telltale_phrases": [
+        "myopia is corrected by convex lens",
+        "nearsighted ko convex lens lagta hai",
+        "myopia mein convex lens use hota hai"
+      ],
+      "correction": "In myopia the image forms in front of the retina, so a concave (diverging) lens is used to push the image back onto it. Convex lenses correct hypermetropia.",
+      "analogy": "If the picture lands too early, you need to spread the rays a little first."
+    },
+    {
+      "id": "MC14",
+      "concept_ids": [
+        "E3"
+      ],
+      "label": "Prism adds colours",
+      "description": "Student thinks the prism creates or adds colours to white light.",
+      "telltale_phrases": [
+        "prism adds colours to light",
+        "prism rang daalta hai",
+        "glass colours ko paida karta hai"
+      ],
+      "correction": "White light already contains all colours; a prism only separates them because each colour bends by a different amount.",
+      "analogy": "A prism is like a sorting machine, not a paint box."
+    },
+    {
+      "id": "MC15",
+      "concept_ids": [
+        "E4"
+      ],
+      "label": "Wrong reason for blue sky",
+      "description": "Student thinks the sky is blue because it reflects the sea, or that red light scatters the most.",
+      "telltale_phrases": [
+        "sky is blue because of the ocean",
+        "sea ka reflection hai",
+        "red light scatters the most",
+        "laal rang sabse zyada bikharta hai"
+      ],
+      "correction": "Air molecules scatter short wavelengths (blue) far more than long ones (red), so scattered blue light reaches us from all directions.",
+      "analogy": "Tiny ripples scatter small waves more than big ones."
+    },
+    {
+      "id": "MC16",
+      "concept_ids": [
+        "M1"
+      ],
+      "label": "Field lines can intersect",
+      "description": "Student thinks magnetic field lines can cross each other.",
+      "telltale_phrases": [
+        "field lines cross at the centre",
+        "lines can intersect",
+        "field lines ek dusre ko kaat sakti hain"
+      ],
+      "correction": "Two field lines would give two directions of the field at the crossing point, which is impossible, so field lines never intersect.",
+      "analogy": "Two road signs pointing in different directions at the same spot would leave the driver confused, so a single spot has only one direction."
+    },
+    {
+      "id": "MC17",
+      "concept_ids": [
+        "M2"
+      ],
+      "label": "Only magnets make magnetic fields",
+      "description": "Student believes only magnets can produce magnetic fields, not electric currents.",
+      "telltale_phrases": [
+        "only magnets have magnetic fields",
+        "a wire cannot have a magnetic field",
+        "sirf magnet se field banti hai",
+        "taar mein se field nahi nikalti"
+      ],
+      "correction": "Oersted showed that a current-carrying wire produces a magnetic field around it, which is why a compass needle deflects near it.",
+      "analogy": "A moving crowd of charges makes a 'wind' of magnetism around the wire, just as a moving fan makes air movement."
+    },
+    {
+      "id": "MC18",
+      "concept_ids": [
+        "M3"
+      ],
+      "label": "Force is along the field",
+      "description": "Student believes the force on a current-carrying conductor acts along the direction of the magnetic field.",
+      "telltale_phrases": [
+        "force is in the direction of the field",
+        "force along B",
+        "force field ki direction mein lagta hai",
+        "force B ke saath saath hota hai"
+      ],
+      "correction": "The force is perpendicular to both the current and the magnetic field. Use Fleming's left-hand rule: Force, Field, Current are mutually perpendicular.",
+      "analogy": "Like pushing a door sideways with your thumb even though the hinge line and your palm point elsewhere."
+    },
+    {
+      "id": "MC19",
+      "concept_ids": [
+        "M4"
+      ],
+      "label": "Earth wire / fuse confusion",
+      "description": "Student thinks the earth wire normally carries current, or that the fuse goes in the neutral wire.",
+      "telltale_phrases": [
+        "earth wire carries current",
+        "fuse goes in neutral wire",
+        "earth wire se current bahta hai",
+        "fuse neutral mein lagta hai"
+      ],
+      "correction": "The earth wire carries current only if there is a fault, to protect us from shocks. A fuse is put in the live wire so the circuit breaks before the appliance gets damaged.",
+      "analogy": "Earth wire is the emergency exit that stays empty until a fire; the fuse is the main gate that closes at the entrance."
+    },
+    {
+      "id": "MC20",
+      "concept_ids": [
+        "L1"
+      ],
+      "label": "Angles measured from the surface",
+      "description": "Student measures the angle of incidence/reflection from the mirror surface instead of from the normal.",
+      "telltale_phrases": [
+        "angle between ray and mirror",
+        "i measured from the mirror surface",
+        "mirror se angle naapa",
+        "surface se angle liya"
+      ],
+      "correction": "Angles of incidence and reflection are always measured from the normal (the line perpendicular to the surface), not from the surface.",
+      "analogy": "Like measuring how far you swing from a straight-up pole, not from the ground."
+    },
+    {
+      "id": "MC21",
+      "concept_ids": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C7",
+        "L3",
+        "L6"
+      ],
+      "label": "Formula used upside-down",
+      "description": "Student rearranges or applies a formula the wrong way round, e.g. Q = I/t instead of Q = I × t, or V = R/I.",
+      "telltale_phrases": [
+        "charge = current / time",
+        "Q = I / t",
+        "charge equals current divided by time",
+        "current ko time se divide kiya",
+        "V = R / I",
+        "I = Q × t",
+        "formula ulta laga diya"
+      ],
+      "correction": "Q = I × t: charge is current multiplied by time. Check the units: ampere × second = coulomb, while ampere ÷ second is not charge.",
+      "analogy": "Distance = speed × time. You would never divide speed by time to find how far you have travelled."
+    },
+    {
+      "id": "MC22",
+      "concept_ids": [
+        "C1",
+        "C3",
+        "C4",
+        "C7",
+        "L3",
+        "L6"
+      ],
+      "label": "Unit or prefix not converted",
+      "description": "Student forgets to convert units or prefixes (mA to A, cm to m, minutes to seconds) before using a formula.",
+      "telltale_phrases": [
+        "did not convert cm to m",
+        "forgot to convert units",
+        "mA ko A nahi kiya",
+        "cm ko m mein nahi badla",
+        "minutes ko seconds nahi kiya",
+        "units convert nahi kiye",
+        "milliamp"
+      ],
+      "correction": "Convert everything to SI units first: 1 mA = 0.001 A, 100 cm = 1 m, 1 min = 60 s. Then check that the unit of your answer matches the quantity you wanted.",
+      "analogy": "You cannot add 2 rupees and 50 paise as '52'; first turn both into the same unit."
+    },
+    {
+      "id": "MC_UNKNOWN",
+      "concept_ids": [],
+      "label": "Other / unclear reasoning",
+      "description": "Wrong answer that does not match a known misconception. The classifier must still give a short specific label and a targeted explanation.",
+      "telltale_phrases": [],
+      "correction": "Let's go back to the basic definition and work it through step by step.",
+      "analogy": ""
+    }
   ]
 }

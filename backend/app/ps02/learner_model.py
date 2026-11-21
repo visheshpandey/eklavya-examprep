@@ -34,7 +34,7 @@ def posterior(p: float, correct: bool, slip: float = P_SLIP, guess: float = P_GU
 
 
 def clamp(p: float) -> float:
-    return min(0.99, max(0.05, p))   # floor: a few misses should not read as "0%"
+    return min(0.99, max(0.10, p))   # floor: a few misses should not read as "0%"
 
 
 def bkt_update(p: float, correct: bool, learn: float = P_LEARN, weight: float = 1.0) -> float:

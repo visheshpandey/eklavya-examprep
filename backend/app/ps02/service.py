@@ -19,9 +19,14 @@ CHECK_EVERY = 4     # ask for reasoning on about 1 in 4 correct answers, to catc
 
 
 # ------------------------------------------------------------------ students
+DEFAULT_CLASS = "10-B"
+
+
 def create_student(name: str, class_section: str = "", is_demo: bool = False) -> dict:
-    sid = db.execute("INSERT INTO students (name, class_section, is_demo) VALUES (?,?,?)", (name.strip() or "Student", class_section.strip(), 1 if is_demo else 0))
-    return {"id": sid, "name": name.strip() or "Student", "class_section": class_section.strip()}
+    """New students join class 10-B (unless told otherwise) so they show up on the teacher heatmap straight away."""
+    section = class_section.strip() or DEFAULT_CLASS
+    sid = db.execute("INSERT INTO students (name, class_section, is_demo) VALUES (?,?,?)", (name.strip() or "Student", section, 1 if is_demo else 0))
+    return {"id": sid, "name": name.strip() or "Student", "class_section": section}
 
 
 def get_student(student_id: int) -> dict | None:
@@ -130,7 +135,8 @@ def record_answer(student_id: int, question: dict, chosen_index: int, *, phase: 
 
 
 # ------------------------------------------------------------------ next question
-def _recent_stems(student_id: int, n: int = 5) -> list[str]:
+def _recent_stems(student_id: int, n: int = 200) -> list[str]:
+    """Every stem this student has seen (newest first): new questions must not repeat any of them."""
     rows = db.query("SELECT question_json FROM attempts WHERE student_id=? ORDER BY id DESC LIMIT ?", (student_id, n))
     return [json.loads(r["question_json"]).get("stem", "") for r in rows]
 

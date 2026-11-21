@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { h } from '../dom.js';
-import { getStudent, setStudent } from '../state.js';
+import { clearStudent, getStudent, setStudent } from '../state.js';
 import { toast } from '../ui.js';
 
 export async function landing(root) {
@@ -38,9 +38,10 @@ export async function landing(root) {
       h('p', { class: 'hero-sub' }, 'Take a 14-question diagnostic, see your concept map, then practise on exactly what is weak. When you get one wrong, say why in your own words (by voice, if you like) and Eklavya names the misconception behind it.'),
       h('div', { class: 'hero-actions' },
         existing && h('a', { class: 'btn btn-primary', href: '#/map' }, `Continue as ${existing.name}`),
-        h('button', { class: `btn ${existing ? '' : 'btn-primary'}`, type: 'button', onClick: () => { form.hidden = false; nameInput.focus(); } }, 'Start as student'),
+        h('button', { class: `btn ${existing ? '' : 'btn-primary'}`, type: 'button', onClick: () => { form.hidden = false; nameInput.focus(); } }, existing ? 'Start as a new student' : 'Start as student'),
         h('a', { class: 'btn', href: '#/teacher' }, 'Open teacher dashboard'),
         demoBtn),
+      existing && h('p', { class: 'muted small' }, `Not ${existing.name}? `, h('button', { class: 'link-btn', type: 'button', onClick: () => { clearStudent(); location.hash = '#/'; location.reload(); } }, 'Use a different name')),
       form, status),
     h('section', { class: 'pillars', 'aria-label': 'What is inside' },
       pillar('1', 'Diagnose', 'A hand-written diagnostic whose wrong options are built from real misconceptions.', '#/how'),

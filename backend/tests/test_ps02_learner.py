@@ -20,13 +20,13 @@ def test_correct_raises_wrong_lowers():
     for p in (0.15, 0.4, 0.8):
         assert lm.bkt_update(p, False) < p                                      # a wrong answer never raises mastery
         assert lm.bkt_update(p, False, weight=lm.WRONG_WEIGHT) < p
-    assert lm.bkt_update(0.05, False) == 0.05                                    # ...and mastery has a 5% floor
+    assert lm.bkt_update(0.10, False) == 0.10                                    # ...and mastery has a 10% floor
 
 
 def test_bounds_and_weight():
     for p in (0.0, 0.01, 0.5, 0.99, 1.0):
         for ok in (True, False):
-            assert 0.05 <= lm.bkt_update(p, ok) <= 0.99
+            assert 0.10 <= lm.bkt_update(p, ok) <= 0.99
     full = lm.bkt_update(0.5, False)
     soft = lm.bkt_update(0.5, False, weight=0.3)
     assert full < soft < 0.5   # careless slip hurts less

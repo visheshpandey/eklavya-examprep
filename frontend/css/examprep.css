@@ -99,8 +99,12 @@ button.chip, a.chip-action { min-height: 36px; cursor: pointer; }
 .opt-key { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--text-xs); }
 .opt[aria-checked="true"] .opt-key { background: var(--accent-fill); color: var(--on-accent); border-color: var(--accent-fill); }
 .opt:disabled { cursor: default; }
-.opt-correct { border-color: var(--ok-fill); background: var(--ok-soft); }
-.opt-wrong { border-color: var(--bad-text); background: var(--bad-soft); }
+/* after answering: the correct option is green and a wrong pick is red (same specificity as the "selected" style, declared later so it wins) */
+.opt.opt-correct { border-color: var(--ok-fill); background: var(--ok-soft); }
+.opt.opt-wrong { border-color: var(--bad-text); background: var(--bad-soft); }
+.opt.opt-correct .opt-key { background: var(--ok-fill); border-color: var(--ok-fill); color: #fff; }
+.opt.opt-wrong .opt-key { background: var(--bad-text); border-color: var(--bad-text); color: #fff; }
+.opt:disabled:not(.opt-correct):not(.opt-wrong) { opacity: .65; }
 .q-meta { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; }
 .why { background: var(--accent-soft); border-radius: var(--r-control); padding: var(--s-2) var(--s-3); font-size: var(--text-sm); }
 .stage { display: grid; gap: var(--s-4); }

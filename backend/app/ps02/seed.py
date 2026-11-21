@@ -58,7 +58,7 @@ def _quote(mc_id: str | None, rng: random.Random) -> str:
     return rng.choice(m["telltale_phrases"]) if m and m["telltale_phrases"] else "pata nahi, andaza lagaya"
 
 
-def seed_student(profile, index: int, rng: random.Random, attempts: int = 30) -> int:
+def seed_student(profile, index: int, rng: random.Random, attempts: int = 34) -> int:
     name, overrides, default, holds, careless_share = profile
     sid = service.create_student(name, CLASS, is_demo=True)["id"]
     start = datetime.now(timezone.utc) - timedelta(days=14)
@@ -71,6 +71,8 @@ def seed_student(profile, index: int, rng: random.Random, attempts: int = 30) ->
         mc = (holds.get(q["concept_id"]) or [None])[0]
         answers.append({"question_id": q["id"], "chosen_index": q["correct_index"] if ok else _wrong_pick(q, mc, rng)})
     service.submit_diagnostic(sid, answers, when=start)
+    base = lm.get_mastery(sid)   # prior knowledge differs between students: spread the starting values so the heatmap is not made of repeats
+    lm.save_mastery(sid, {c: round(min(0.95, max(0.12, p + rng.gauss(0, 0.07))), 3) for c, p in base.items()}, when=start.isoformat(timespec="seconds"))
 
     # 2) adaptive practice: the REAL planner picks the concept, the profile decides how the student answers
     for n in range(attempts):
@@ -112,10 +114,23 @@ def simulate() -> list[int]:
     return [seed_student(p, i, rng) for i, p in enumerate(PROFILES)]
 
 
+def _spread_reviews(ids: list[int], rng: random.Random) -> None:
+    """Only 2-3 reviews are due right now (so the badge is believable); the rest are scheduled over the coming days."""
+    now = datetime.now(timezone.utc)
+    for sid in ids:
+        rows = db.query("SELECT concept_id FROM reviews WHERE student_id=?", (sid,))
+        rng.shuffle(rows)
+        limit = rng.choice([2, 3])
+        for k, r in enumerate(rows):
+            due = now - timedelta(hours=rng.uniform(1, 20)) if k < limit else now + timedelta(hours=rng.uniform(6, 24 * 9))
+            db.execute("UPDATE reviews SET due_at=? WHERE student_id=? AND concept_id=?", (due.isoformat(timespec="seconds"), sid, r["concept_id"]))
+
+
 def export_fixture() -> None:
     """Regenerate backend/data/demo_class.json from a fresh simulation:  python -m app.ps02.seed"""
     _wipe_demo()
     ids = simulate()
+    _spread_reviews(ids, random.Random(7))
     marks = ",".join("?" * len(ids))
     dump = {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "students": db.query(f"SELECT * FROM students WHERE id IN ({marks})", ids)}
     for table in ("mastery", "attempts", "reviews", "student_misconceptions"):

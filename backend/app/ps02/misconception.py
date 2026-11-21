@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 from pydantic import BaseModel, ValidationError, field_validator
 
@@ -14,11 +15,15 @@ from app.ai import gemini
 from app.ps02 import content
 
 log = logging.getLogger(__name__)
-CLASSIFY_TIMEOUT_MS = 12000
+CLASSIFY_TIMEOUT_MS = 10000   # Gemini rejects deadlines under 10 s; our own 8 s deadline below is what the student waits at most
+CLASSIFY_DEADLINE_S = 8.0
+_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ps02-classify")
 
 SYSTEM = """You are a physics teacher diagnosing WHY a CBSE Class 10 student gave an answer. The student explained their thinking in English, Hindi or
 Hinglish (possibly a speech transcript with errors). Decide which ONE known misconception, if any, their reasoning shows.
-Rules: pick only from the candidate ids given (or MC_UNKNOWN if the reasoning is wrong but matches none; then put a 3-6 word label in new_label).
+Rules: pick only from the candidate ids given (or MC_UNKNOWN if the reasoning is wrong but matches none).
+When you answer MC_UNKNOWN you must NOT be generic: put a specific 3-6 word label for THIS error in new_label (e.g. "Divided instead of multiplied"), quote the faulty step in evidence, and explain exactly that step in the feedback. Formula slips (a formula turned upside down, wrong rearrangement) and unit or prefix errors (mA vs A, cm vs m) are covered by candidates when listed: prefer them.
+fix = one sentence stating the correct idea for exactly this error.
 The 'prior' misconception comes from the option they picked and is only a hint: trust the reasoning text over it.
 If the reasoning is actually correct and the wrong pick was a slip (misread option, arithmetic or tapped wrong), set is_careless_error true and misconception_id "NONE".
 If the answer was correct, set reasoning_sound false only when the reasoning is wrong or shows a lucky guess.
@@ -26,7 +31,7 @@ evidence = a short quote or paraphrase of what the student said. confidence is 0
 feedback_hinglish: friendly Hinglish (Roman script), 2-3 short sentences: name the idea they mixed up, why it is wrong, and ONE intuitive analogy. Use the analogy given for the chosen misconception (put it in your own simple words); never invent a new analogy, and never say anything physically wrong.
 feedback_english: the same in simple English. Never be harsh.
 Return ONLY JSON: {"misconception_id": str, "confidence": number, "evidence": str, "is_careless_error": bool, "reasoning_sound": bool,
-"new_label": str, "feedback_hinglish": str, "feedback_english": str}"""
+"new_label": str, "fix": str, "feedback_hinglish": str, "feedback_english": str}"""
 
 
 class Diagnosis(BaseModel):
@@ -36,6 +41,7 @@ class Diagnosis(BaseModel):
     is_careless_error: bool = False
     reasoning_sound: bool = True
     new_label: str = ""
+    fix: str = ""
     feedback_hinglish: str = ""
     feedback_english: str = ""
 
@@ -81,9 +87,12 @@ def heuristic(question: dict, chosen_index: int, reasoning: str, concept_id: str
     elif prior and prior != "MC_UNKNOWN" and prior in content.misconceptions():
         conf, mc = 0.45, content.misconceptions()[prior]
     else:
-        return Diagnosis(misconception_id="MC_UNKNOWN", confidence=0.3, evidence=reasoning[:120],
-                         feedback_english="Let's go back to the definition and work through it step by step.",
-                         feedback_hinglish="Chalo definition se step-by-step dobara dekhte hain.")
+        # still specific: name the actual question's right answer and its worked explanation, not a generic "revise the definition"
+        chosen, right = question["options"][chosen_index], question["options"][question["correct_index"]]
+        why = question.get("explanation", "")
+        return Diagnosis(misconception_id="MC_UNKNOWN", confidence=0.3, evidence=reasoning[:120], new_label="Working differs from the answer", fix=why,
+                         feedback_english=f"You picked “{chosen}”, but the answer is “{right}”. {why}".strip(),
+                         feedback_hinglish=f"Aapne “{chosen}” chuna, par sahi jawab “{right}” hai. Dekhiye: {why}".strip())
     return Diagnosis(misconception_id=mc["id"], confidence=conf, evidence=reasoning[:120],
                      feedback_english=f"{mc['correction']} Think of it like this: {mc['analogy']}".strip(),
                      feedback_hinglish=f"{mc['label']}: {mc['correction']} {mc['analogy']}".strip())
@@ -95,8 +104,11 @@ def classify(question: dict, chosen_index: int, reasoning: str, concept_id: str,
     allowed = {m["id"] for m in candidates(concept_id)} | {"MC_UNKNOWN", "NONE"}
     source, diag = "ai", None
     try:
-        raw = gemini.llm_json(SYSTEM, _prompt(question, chosen_index, reasoning, concept_id, prior), required_keys=("misconception_id",),
-                              temperature=0.2, timeout_ms=CLASSIFY_TIMEOUT_MS)
+        job = _executor.submit(gemini.llm_json, SYSTEM, _prompt(question, chosen_index, reasoning, concept_id, prior), ("misconception_id",), 0.2, CLASSIFY_TIMEOUT_MS)
+        try:
+            raw = job.result(timeout=CLASSIFY_DEADLINE_S)   # past 8 s the student gets the keyword-matcher answer instead of waiting
+        except FutureTimeout:
+            raise gemini.LLMError("The classifier took longer than 8 seconds") from None
         diag = Diagnosis(**raw)
         if diag.misconception_id not in allowed:
             diag.misconception_id = "MC_UNKNOWN"
@@ -112,6 +124,7 @@ def classify(question: dict, chosen_index: int, reasoning: str, concept_id: str,
     if entry and not diag.feedback_hinglish:
         diag.feedback_hinglish = diag.feedback_english
     out = diag.model_dump()
-    out.update({"source": source, "label": entry["label"] if entry else (diag.new_label or "Needs a closer look"),
+    specific = diag.new_label if diag.misconception_id == "MC_UNKNOWN" and diag.new_label else None   # an unknown error keeps its own specific label, not the catalogue's generic one
+    out.update({"source": source, "label": specific or (entry["label"] if entry else "Needs a closer look"),
                 "correction": entry["correction"] if entry else "", "analogy": entry["analogy"] if entry else ""})
     return out
