@@ -32,3 +32,5 @@ build/
 .next/
 .vercel/
 .pytest_cache/
+
+backend/data/.auth_secret
