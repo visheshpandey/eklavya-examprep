@@ -163,6 +163,7 @@ def plan_next(student_id: int, review: bool = False, concept_id: str | None = No
 def public_question(question_id: str, q: dict, plan: dict) -> dict:
     return {"question_id": question_id, "concept_id": q["concept_id"], "concept_name": content.concepts()[q["concept_id"]]["name"], "chapter": content.concepts()[q["concept_id"]]["chapter"],
             "difficulty": q["difficulty"], "stem": q["stem"], "options": q["options"], "why": plan["why"], "source": q.get("source", "ai"), "note": q.get("note"),
+            "target": {"id": q["target_mc"], "label": content.misconceptions()[q["target_mc"]]["label"]} if q.get("target_mc") else None,
             "trace": plan.get("trace", []), "root_cause": plan.get("root_cause") and {"concept_id": plan["root_cause"]["root"]["concept_id"], "name": plan["root_cause"]["root"]["name"],
                                                                                   "misconception": plan["root_cause"]["root"]["misconception"], "from": plan["root_cause"]["concept_id"], "applied": bool(plan.get("root_applied"))}}
 
@@ -179,17 +180,18 @@ def _load_question(question_id: str) -> dict | None:
     return json.loads(row["payload"]) if row else None
 
 
-def next_question(student_id: int, review: bool = False, concept_id: str | None = None) -> dict:
+def next_question(student_id: int, review: bool = False, concept_id: str | None = None, target_mc: str | None = None) -> dict:
+    target_mc = target_mc if target_mc in content.misconceptions() and target_mc != "MC_UNKNOWN" else None
     plan = plan_next(student_id, review, concept_id)
     cid, diff = plan["concept_id"], plan["difficulty"]
     started = time.perf_counter()
-    q = question_gen.take_prefetched(student_id, cid, diff, wait_seconds=10)
+    q = None if target_mc else question_gen.take_prefetched(student_id, cid, diff, wait_seconds=10)   # a targeted question is never the generic prefetched one
     prefetched = q is not None
     if q is None:
         active = [m["id"] for m in active_misconceptions(student_id) if cid in content.misconceptions()[m["id"]]["concept_ids"]]
-        q = question_gen.generate(cid, diff, active, _recent_stems(student_id), _notes_ctx(student_id, cid))   # only on a prefetch miss
+        q = question_gen.generate(cid, diff, active, _recent_stems(student_id), _notes_ctx(student_id, cid), target_mc)   # only on a prefetch miss
     q = {**q, "difficulty": diff}   # the badge, the stored question, BKT and the "why" line all use the planner's one difficulty value
-    plan = {**plan, "trace": plan["trace"] + agent.steps_for_generation(q, prefetched, round((time.perf_counter() - started) * 1000))}
+    plan = {**plan, "trace": plan["trace"] + agent.steps_for_generation(q, prefetched, round((time.perf_counter() - started) * 1000), target_mc)}
     return public_question(_store_question(student_id, q), q, plan)
 
 

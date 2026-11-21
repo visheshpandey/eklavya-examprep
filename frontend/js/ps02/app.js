@@ -72,7 +72,7 @@ let startingOver = false;
 window.addEventListener('ps02:student-gone', () => {   // the saved student id no longer exists on the server (database reset): forget it and go to the landing page
   if (startingOver) return;   // several requests fail at once; handle it once
   startingOver = true;
-  clearStudent(); toast('That student no longer exists, so we started you fresh.');
+  clearStudent(); toast('Your session expired, start again.');
   if (location.hash === '#/' || location.hash === '') render(); else location.hash = '#/';
   setTimeout(() => { startingOver = false; }, 1500);
 });

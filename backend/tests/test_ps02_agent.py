@@ -135,3 +135,19 @@ def test_dialogue_can_start_from_a_misconception_without_an_attempt(monkeypatch)
     assert r["status"] == "resolved" and r["mastery_changes"][0]["concept_id"] == "C1"
     bad = client.post("/api/dialogue/start", json={"student_id": sid, "misconception_id": "MC01"})
     assert bad.status_code == 422
+
+
+def test_the_root_cause_prompt_asks_for_the_requested_language_with_a_hinglish_example(monkeypatch):
+    seen = {}
+
+    def fake(system, prompt, required_keys=(), temperature=0.7, timeout_ms=None, model=None):
+        seen["system"], seen["prompt"] = system, prompt
+        return {"text": "Tumhe series ki problem nahi hai. Pehle current theek karo."}
+    monkeypatch.setattr(gemini, "llm_json", fake)
+    rootcause._explain_cache.clear()
+    t = rootcause.trace("C5", mastery(C1=0.2, C3=0.45, C5=0.22), [MC01])
+    text, source = rootcause.explain(t, "hinglish")
+    assert source == "ai" and "Tumhe <failing concept> ki problem nahi hai" in seen["system"] and "Language: Hinglish" in seen["prompt"]
+    rootcause._explain_cache.clear()
+    rootcause.explain(t, "english")
+    assert "Language: English" in seen["prompt"]

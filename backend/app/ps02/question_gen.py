@@ -66,7 +66,7 @@ Return ONLY JSON: {"stem": str, "options": [4 strings], "correct_index": 0-3, "d
 Difficulty 1 = direct recall or one step; 2 = a short calculation or a comparison; 3 = multi-step or a tricky case."""
 
 
-def _prompt(concept_id: str, difficulty: int, active_mcs: list[str], recent_stems: list[str], notes: dict | None = None) -> str:
+def _prompt(concept_id: str, difficulty: int, active_mcs: list[str], recent_stems: list[str], notes: dict | None = None, target_mc: str | None = None) -> str:
     c = content.concepts()[concept_id]
     mcs = content.misconceptions()
     pool = [m for m in mcs.values() if concept_id in m["concept_ids"]]
@@ -74,10 +74,12 @@ def _prompt(concept_id: str, difficulty: int, active_mcs: list[str], recent_stem
     listing = "\n".join(f'- {m["id"]}: {m["description"]}' for m in pool) or "- (none known; use MC_UNKNOWN)"
     formulas = ", ".join(c["key_formulas"]) or "none"
     avoid = "\n".join(f"- {s}" for s in recent_stems[:8]) or "- (none)"
+    aim = (f"\nTARGET: this question must test the misconception {target_mc}: {mcs[target_mc]['description']} At least TWO of the three wrong options must be "
+           f"built from it and mapped to {target_mc} in distractor_misconceptions; set the scenario so a student holding this belief would be tempted by them.\n") if target_mc in mcs else ""
     own = (f"\nThe student's OWN NOTES on this topic (set used_notes true and let the question's scenario and the explanation follow these notes when they fit, in the notes' terms; "
            f"otherwise set used_notes false):\n{notes['text']}\n") if notes else ""
     return (f"Concept {concept_id}: {c['name']} ({c['chapter']}). {c['description']}\nKey formulas: {formulas}\n{own}"
-            f"Target difficulty: {difficulty}\nMisconceptions to build wrong options from:\n{listing}\n"
+            f"Target difficulty: {difficulty}\nMisconceptions to build wrong options from:\n{listing}\n{aim}"
             f"The student currently holds: {', '.join(active_mcs) or 'nothing recorded'}\nStems already used (do not repeat):\n{avoid}")
 
 
@@ -102,11 +104,12 @@ def _shuffle(q: GeneratedQuestion) -> dict:
             "difficulty": q.difficulty, "concept_id": q.concept_id, "explanation": q.explanation.strip()}
 
 
-def generate(concept_id: str, difficulty: int, active_mcs: list[str] | None = None, recent_stems: list[str] | None = None, notes: dict | None = None) -> dict:
+def generate(concept_id: str, difficulty: int, active_mcs: list[str] | None = None, recent_stems: list[str] | None = None, notes: dict | None = None, target_mc: str | None = None) -> dict:
     """Return a validated question dict. Tries the LLM twice; on failure falls back to a cached or hand-written question (``source`` says which)."""
     active_mcs, recent_stems = active_mcs or [], recent_stems or []
     seen = {s.strip() for s in recent_stems} | {q["stem"].strip() for q in content.diagnostic()}   # never repeat a stem the student saw, nor a diagnostic one
-    prompt = _prompt(concept_id, difficulty, active_mcs, recent_stems, notes)
+    target_mc = target_mc if target_mc in content.misconceptions() and target_mc != "MC_UNKNOWN" else None
+    prompt = _prompt(concept_id, difficulty, active_mcs, recent_stems, notes, target_mc)
     for attempt in (1, 2):
         try:
             raw = llm.hedged_json(SYSTEM, prompt, ("stem", "options", "correct_index"), 0.8 if attempt == 1 else 0.4, deadline_s=GEN_DEADLINE_S, hedge_after_s=5.0)
@@ -114,8 +117,11 @@ def generate(concept_id: str, difficulty: int, active_mcs: list[str] | None = No
             q.concept_id, q.difficulty = concept_id, difficulty   # never trust the model's own difficulty label: the planner decided it
             if q.stem.strip() in seen:
                 continue
+            if target_mc and target_mc not in q.distractor_misconceptions.values():
+                continue   # asked to aim at the misconception but no option is built from it: try once more
             out = _shuffle(q)
             out["source"] = "ai"
+            out["target_mc"] = target_mc
             out["note"] = notes["citation"] if (notes and (q.used_notes or _overlaps_notes(out, notes["text"]))) else None   # cite only when the model used the passage or the wording clearly follows it
             with _lock:
                 _cache.setdefault(concept_id, []).append(out)

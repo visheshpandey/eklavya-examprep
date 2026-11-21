@@ -66,6 +66,8 @@ def trace(concept_id: str, mastery: dict[str, float], active: list[dict]) -> dic
 
 SYSTEM = """You are Eklavya, a physics tutor. In ONE or TWO short sentences, in the requested language, tell the student what is really wrong, in the form:
 "You don't have a <failing concept> problem. You believe <the wrong idea in plain words> (in <root concept>). Fix that and <failing concept> will follow."
+Write it in the requested language. For English use the form above. For Hinglish (Roman-script Hindi mixed with English) write it like:
+"Tumhe <failing concept> ki problem nahi hai. Tum maante ho ki <the wrong idea in plain words> (<root concept> mein). Pehle use theek karo, to <failing concept> khud aasan ho jayega."
 Use ONLY the facts given. If no misconception is named, say the <root concept> basics are weak and need fixing first. Friendly, never harsh.
 Return ONLY JSON: {"text": str}"""
 

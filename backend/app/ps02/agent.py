@@ -100,7 +100,7 @@ def _active(student_id: int) -> list[dict]:
 
 
 # ------------------------------------------------------------------ steps recorded after the question was served / answered
-def steps_for_generation(q: dict, prefetched: bool, ms: int) -> list[dict]:
+def steps_for_generation(q: dict, prefetched: bool, ms: int, target_mc: str | None = None) -> list[dict]:
     mcs = content.misconceptions()
     used = [mcs[m]["label"] for m in dict.fromkeys(q.get("distractor_misconceptions", {}).values()) if m in mcs and m != "MC_UNKNOWN"]
     src = q.get("source", "ai")
@@ -108,6 +108,8 @@ def steps_for_generation(q: dict, prefetched: bool, ms: int) -> list[dict]:
         text = ("Used the question generated while you were reading the last one" if prefetched else "Generated a question") + (f", with wrong options built from: {', '.join(used)}" if used else "")
     else:
         text = "The AI was slow, so I used a prepared question"
+    if target_mc and q.get("target_mc") == target_mc:
+        text += f". Aimed at “{mcs[target_mc]['label']}”: the wrong options are built from it"
     if q.get("note"):
         text += f". Grounded in your notes: {q['note']['file_name']}"
     return [{"tool": "generate_question", "summary": text, "ms": ms}]

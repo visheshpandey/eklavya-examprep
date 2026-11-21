@@ -20,6 +20,8 @@ export async function practice(root, ctx) {
   const review = ctx.query.review === '1';
   let firstConcept = ctx.query.concept || null;
   let done = 0, total = null;
+  const targetMc = ctx.query.talk || null, rootConcept = ctx.query.talk ? ctx.query.concept || null : null;   // after "Fix the root first"
+  let targetLeft = 0;   // the next 3 questions are aimed at that misconception
   const stage = h('div', { class: 'stage' });
   const counter = h('p', { class: 'muted small' });
 
@@ -58,7 +60,12 @@ export async function practice(root, ctx) {
     counter.textContent = review ? `Review ${done + 1} of ${total}` : '';
     stage.replaceChildren(loading('Choosing the best next question for you…', 4));
     try {
-      const q = await api(`/api/practice/next?${qs({ student_id: student.id, ...(review ? { review: 1 } : {}), ...(firstConcept ? { concept_id: firstConcept } : {}) })}`);
+      const params = { student_id: student.id, ...(review ? { review: 1 } : {}) };
+      let aimed = 0;
+      if (targetLeft > 0 && rootConcept) { params.concept_id = rootConcept; params.target_mc = targetMc; aimed = 4 - targetLeft; targetLeft -= 1; }
+      else if (firstConcept) params.concept_id = firstConcept;
+      const q = await api(`/api/practice/next?${qs(params)}`);
+      q.aimed = aimed;
       firstConcept = null;
       if (ctx.live()) showQuestion(q);
     } catch (err) { if (ctx.live()) stage.replaceChildren(errorCard(err.message, nextQuestion)); }
@@ -103,6 +110,7 @@ export async function practice(root, ctx) {
       rc && h('p', { class: `root-chip ${rc.applied ? 'root-applied' : ''}` }, rc.applied ? '🎯 Root first: ' : '💡 Heads up: ',
         rc.applied ? `${rc.name} is what is holding things back (${rc.misconception?.label || 'weak basics'}), so we start there.` : `if this keeps going wrong, the root cause may be in ${rc.name}${rc.misconception ? ` (${rc.misconception.label})` : ''}. `,
         !rc.applied && h('a', { class: 'link', href: `#/practice?concept=${rc.concept_id}${rc.misconception ? `&talk=${rc.misconception.id}` : ''}` }, 'Fix the root first')),
+      q.target && q.aimed > 0 && h('p', { class: 'root-chip root-applied' }, `🎯 Aimed at “${q.target.label}” · question ${q.aimed} of 3`),
       q.note && h('p', { class: 'cite cite-notes' }, '📄 From your notes: ', h('b', null, [q.note.file_name, q.note.heading || q.note.topic].filter(Boolean).join(' · '))),
       h('h2', { class: 'stem' }, q.stem), h('div', { class: 'options', role: 'radiogroup', 'aria-label': 'Answer options' }, options),
       h('div', { class: 'row' }, submit, h('button', { class: 'btn btn-quiet btn-small', type: 'button', onClick: () => speak(questionToSpeech(q), getLang(), { force: true }) }, '🔊 Read aloud')), voiceStatus),
@@ -274,9 +282,10 @@ export async function practice(root, ctx) {
     const intro = h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, assigned ? '📌 Your teacher assigned this' : 'Fix the root first'),
       h('h2', null, assigned ? 'A short conversation, then practice' : 'Let’s talk about the real cause'),
       h('p', null, assigned ? 'Your teacher noticed a few students share this idea. Talk it through with Eklavya in your own words, then practise.' : 'Before more practice, let’s clear the idea underneath. Explain it in your own words.'));
-    const go = h('button', { class: 'btn btn-primary', type: 'button', hidden: true, onClick: () => nextQuestion() }, 'Now practise this concept');
-    const dlg = mountDialogue({ student, misconceptionId, conceptId: concept, onDone: () => { go.hidden = false; go.focus(); }, onUnavailable: () => nextQuestion() });
-    stage.replaceChildren(intro, dlg, h('div', { class: 'row' }, go, h('button', { class: 'btn btn-quiet', type: 'button', onClick: () => nextQuestion() }, 'Skip to practice')));
+    const startTargeted = () => { targetLeft = 3; firstConcept = null; nextQuestion(); };
+    const go = h('button', { class: 'btn btn-primary', type: 'button', hidden: true, onClick: startTargeted }, 'Now practise this concept');
+    const dlg = mountDialogue({ student, misconceptionId, conceptId: concept, onDone: () => { go.hidden = false; go.focus(); }, onUnavailable: startTargeted });
+    stage.replaceChildren(intro, dlg, h('div', { class: 'row' }, go, h('button', { class: 'btn btn-quiet', type: 'button', onClick: startTargeted }, 'Skip to practice')));
   }
 
   if (ctx.query.talk && firstConcept) rootFirst(firstConcept, ctx.query.talk); else nextQuestion();

@@ -110,6 +110,6 @@ export function mountAskWidget() {
   }
 
   // the Practice and Map screens tell us which concept is on screen, so a doubt asked there is tagged to it
-  globalThis.addEventListener('hashchange', () => { hint = null; });
+  globalThis.addEventListener('hashchange', () => { hint = null; if (open) toggle(false); });   // navigating closes the panel
   return { open: () => toggle(true) };
 }

@@ -204,5 +204,7 @@ export async function mapScreen(root, ctx) {
   if (!teacherView) writeSnap(studentId, nodes);   // the next visit animates only what changes after this one
   if (reveal) history.replaceState(null, '', '#/map');
   loadStruggles();
+  const onLang = () => { if (!ctx.live()) { globalThis.removeEventListener('ps02:lang', onLang); return; } loadStruggles(); };   // the root-cause card follows the chosen language
+  globalThis.addEventListener('ps02:lang', onLang);
   if (!teacherView) api(`/api/practice/prefetch?${qs({ student_id: studentId })}`, { method: 'POST', timeout: 20000 }).catch(() => {});   // warm the first practice question
 }

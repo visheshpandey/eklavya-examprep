@@ -12,4 +12,4 @@ export function clearStudent() { memory = null; try { localStorage.removeItem(KE
 
 /** 'hinglish' | 'english' | 'hindi': feedback text (Hindi shows Hinglish) and the microphone language. */
 export const getLang = () => read(LANG) || 'hinglish';
-export const setLang = (lang) => write(LANG, lang);
+export const setLang = (lang) => { write(LANG, lang); globalThis.dispatchEvent?.(new CustomEvent('ps02:lang', { detail: lang })); };

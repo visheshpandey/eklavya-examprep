@@ -108,9 +108,9 @@ def diagnostic_submit(body: DiagSubmit):
 
 
 @router.get("/api/practice/next")
-def practice_next(student_id: int, review: bool = False, concept_id: str | None = None):
+def practice_next(student_id: int, review: bool = False, concept_id: str | None = None, target_mc: str | None = None):
     _student(student_id)
-    return service.next_question(student_id, review=review, concept_id=concept_id)
+    return service.next_question(student_id, review=review, concept_id=concept_id, target_mc=target_mc)
 
 
 @router.post("/api/practice/prefetch")

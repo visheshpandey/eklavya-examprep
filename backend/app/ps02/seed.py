@@ -123,10 +123,74 @@ def _spread_reviews(ids: list[int], rng: random.Random) -> None:
             db.execute("UPDATE reviews SET due_at=? WHERE student_id=? AND concept_id=?", (due.isoformat(timespec="seconds"), sid, r["concept_id"]))
 
 
+PREREQ_GAP = 0.25   # a concept may sit at most this far above its weakest prerequisite
+
+# The demo student's headline story is written down, not left to simulation luck, because the Judge tour depends on it:
+# "Series circuits keeps going wrong. You don't have a series problem: you believe current gets used up, in Charge & current."
+STORY_STUDENT = "Aarav Sharma"
+STORY_MASTERY = {"C1": 0.36, "C2": 0.50, "C3": 0.44, "C4": 0.46, "C5": 0.28, "C6": 0.22, "C7": 0.34}
+STORY_C5_PATH = [0.52, 0.44, 0.37, 0.31, 0.28]     # Series circuits slipping over five practice answers (feeds the sparkline)
+STORY_QUOTES = ["bulb mein current kha jaata hai isliye aage kam bachta hai", "resistor ke baad current kam ho jata hai", "current use ho jata hai bulb mein"]
+
+
+def _apply_demo_story(ids: list[int]) -> None:
+    row = db.one("SELECT id FROM students WHERE name=? AND is_demo=1 ORDER BY id DESC LIMIT 1", (STORY_STUDENT,))
+    if not row or row["id"] not in ids:
+        return
+    sid, graph, now = row["id"], content.concepts(), datetime.now(timezone.utc)
+    m = lm.get_mastery(sid)
+    m.update(STORY_MASTERY)
+    lm.save_mastery(sid, m)
+    # the evidence: "Current gets used up" shown three times, still unresolved
+    db.execute("DELETE FROM student_misconceptions WHERE student_id=? AND misconception_id='MC01'", (sid,))
+    db.execute("INSERT INTO student_misconceptions (student_id, misconception_id, count, last_seen, resolved, last_quote) VALUES (?,?,?,?,0,?)",
+               (sid, "MC01", 3, (now - timedelta(hours=5)).isoformat(timespec="seconds"), STORY_QUOTES[0]))
+    # five practice answers on Series circuits, the last three wrong, with the quotes that show the idea
+    db.execute("DELETE FROM attempts WHERE student_id=? AND concept_id='C5' AND phase='practice'", (sid,))
+    question = {"stem": "Two identical bulbs are in series with a battery. How does the current after the second bulb compare with the current before the first?",
+                "options": ["Smaller", "The same", "Larger", "Zero"], "correct_index": 1, "concept_id": "C5", "difficulty": 2,
+                "distractor_misconceptions": {"0": "MC01", "2": "MC_UNKNOWN", "3": "MC01"}, "explanation": "The same current flows through every part of a series circuit.", "source": "seed"}
+    prev = 0.58
+    for k, after in enumerate(STORY_C5_PATH):
+        correct = k < 2
+        when = (now - timedelta(days=2, hours=-3 * k)).isoformat(timespec="seconds")
+        deltas = [{"concept_id": "C5", "name": graph["C5"]["name"], "before": prev, "after": after, "reason": "answered correctly" if correct else "answered wrong"}]
+        db.execute("INSERT INTO attempts (student_id, question_json, concept_id, difficulty, chosen_index, correct, reasoning_text, reasoning_mode, misconception_id, misconception_confidence, "
+                   "is_careless, phase, delta_json, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,0,'practice',?,?)",
+                   (sid, json.dumps(question), "C5", 2, 1 if correct else 0, 1 if correct else 0, None if correct else STORY_QUOTES[(k - 2) % 3], None if correct else "voice",
+                    None if correct else "MC01", None if correct else 0.9, json.dumps({"deltas": deltas}), when))
+        prev = after
+    db.execute("UPDATE mastery SET attempts=?, correct=? WHERE student_id=? AND concept_id='C5'", (5, 2, sid))
+    # keep the story clean: Series circuits is the ONE concept he is struggling on, and "Current gets used up" the one misconception he holds
+    db.execute("DELETE FROM attempts WHERE student_id=? AND phase='practice' AND concept_id<>'C5'", (sid,))
+    db.execute("UPDATE mastery SET attempts=1, correct=0 WHERE student_id=? AND concept_id<>'C5' AND attempts>1", (sid,))
+    db.execute("DELETE FROM student_misconceptions WHERE student_id=? AND misconception_id<>'MC01'", (sid,))
+    # a classmate shares the idea, so the teacher co-pilot has a real "Current gets used up" group (Aarav + Rohan)
+    mate = db.one("SELECT id FROM students WHERE name='Rohan Verma' AND is_demo=1 ORDER BY id DESC LIMIT 1")
+    if mate:
+        db.execute("DELETE FROM student_misconceptions WHERE student_id=? AND misconception_id='MC01'", (mate["id"],))
+        db.execute("INSERT INTO student_misconceptions (student_id, misconception_id, count, last_seen, resolved, last_quote) VALUES (?,?,?,?,0,?)",
+                   (mate["id"], "MC01", 2, (now - timedelta(hours=9)).isoformat(timespec="seconds"), "current kam ho jaata hai bulb ke baad"))
+
+
+def _enforce_prerequisite_order(ids: list[int]) -> None:
+    """A student cannot be strong on Series circuits while Ohm's law is at 10%: cap every concept at (weakest prerequisite + 25 points)."""
+    graph = content.concepts()
+    for sid in ids:
+        m = lm.get_mastery(sid)
+        for cid in content.concept_order():            # prerequisites come first, so a cap cascades down the graph
+            pre = graph[cid]["prerequisites"]
+            if pre:
+                m[cid] = round(min(m[cid], min(m[p] for p in pre) + PREREQ_GAP), 3)
+        lm.save_mastery(sid, m)
+
+
 def export_fixture() -> None:
     """Regenerate backend/data/demo_class.json from a fresh simulation:  python -m app.ps02.seed"""
     _wipe_demo()
     ids = simulate()
+    _apply_demo_story(ids)
+    _enforce_prerequisite_order(ids)
     _spread_reviews(ids, random.Random(7))
     marks = ",".join("?" * len(ids))
     dump = {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "students": db.query(f"SELECT * FROM students WHERE id IN ({marks})", ids)}
