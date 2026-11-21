@@ -134,7 +134,7 @@ def save_mastery(student_id: int, new: dict[str, float], touched: dict[str, bool
     with db.get_conn() as c:
         for cid, p in new.items():
             row = c.execute("SELECT attempts, correct, last_seen FROM mastery WHERE student_id=? AND concept_id=?", (student_id, cid)).fetchone()
-            attempts, correct, last_seen = (row[0], row[1], row[2]) if row else (0, 0, None)
+            attempts, correct, last_seen = (row["attempts"], row["correct"], row["last_seen"]) if row else (0, 0, None)
             if cid in touched:
                 attempts += 1
                 correct += 1 if touched[cid] else 0

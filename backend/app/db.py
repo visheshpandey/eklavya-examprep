@@ -256,6 +256,9 @@ class _PgCursor:
     def fetchall(self):
         return self._cursor.fetchall() if self._cursor.description else []
 
+    def fetchone(self):
+        return self._cursor.fetchone() if self._cursor.description else None
+
     def __iter__(self):
         return iter(self.fetchall())
 
@@ -332,9 +335,24 @@ def init_db():
             c.execute("SELECT setval(pg_get_serial_sequence('users', 'id'), (SELECT MAX(id) FROM users))")
 
 
+def _once_more(run):
+    """On Postgres a pooled connection can be closed by the host between two statements (idle timeout, pooler restart). A single statement is safe to run
+    again on a fresh connection, once."""
+    if not PG:
+        return run()
+    from psycopg import OperationalError
+    try:
+        return run()
+    except OperationalError:
+        log.warning("Database connection dropped; retrying once")
+        return run()
+
+
 def query(sql, args=()):
-    with get_conn() as c:
-        return [dict(r) for r in c.execute(sql, args).fetchall()]
+    def run():
+        with get_conn() as c:
+            return [dict(r) for r in c.execute(sql, args).fetchall()]
+    return _once_more(run)
 
 
 def one(sql, args=()):
@@ -344,8 +362,10 @@ def one(sql, args=()):
 
 def execute(sql, args=()):
     """Run a write and return the new row id."""
-    with get_conn() as c:
-        return c.execute(sql, args).lastrowid
+    def run():
+        with get_conn() as c:
+            return c.execute(sql, args).lastrowid
+    return _once_more(run)
 
 
 def is_guest(user_id) -> bool:
